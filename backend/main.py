@@ -13,4 +13,15 @@ app.add_middleware(
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "tamamagang"}
+    from lib.crypto import encrypt, decrypt
+
+    password = "demo123"
+    plaintext = "tamamagang"
+
+    enc = encrypt(plaintext, password)
+    dec = decrypt(enc["ciphertext"], enc["iv"], enc["salt"], password)
+
+    if dec == plaintext:
+        return {"status": "ok", "roundtrip": dec}
+
+    return {"status": "fail", "roundtrip": dec}
