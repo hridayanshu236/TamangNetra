@@ -1,0 +1,14 @@
+fastapi 
+uvicorn 
+python-multipart 
+pycryptodome 
+spacy 
+redis 
+sentence-transformers 
+pymupdf 
+reportlab 
+pandas 
+openpyxl 
+pytesseract 
+python-dotenv 
+httpx
