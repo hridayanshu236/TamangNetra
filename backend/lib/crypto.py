@@ -77,7 +77,7 @@ def decrypt(ciphertext: str, iv: str, salt: str, password: str) -> str:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    test_plain = "tamamagang"
+    test_plain = "tamangnetra"
     test_pass = "demo123"
 
     enc = encrypt(test_plain, test_pass)

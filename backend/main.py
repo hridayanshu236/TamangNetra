@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routers import scrub, translate, jobs
 
-app = FastAPI(title="TaMAMAgang API")
+app = FastAPI(title="TamangNetra API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -11,12 +12,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(scrub.router)
+app.include_router(translate.router)
+app.include_router(jobs.router)
+
 @app.get("/health")
 def health():
     from lib.crypto import encrypt, decrypt
 
     password = "demo123"
-    plaintext = "tamamagang"
+    plaintext = "tamangnetra"
 
     enc = encrypt(plaintext, password)
     dec = decrypt(enc["ciphertext"], enc["iv"], enc["salt"], password)
