@@ -76,3 +76,18 @@ docker-compose up --build
 * Ports **3000**, **8000**, and **6379** must be free on your local machine.
 * Docker manages all dependencies internally (no need for a Python `venv` or local `node_modules`).
 ```
+
+
+
+
+
+## Create env.local.example in frontend
+
+with the content: NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+
+```bash
+cp .env.local.example .env.local
+```
+
+---
+
