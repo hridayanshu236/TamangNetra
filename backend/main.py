@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import scrub, translate, jobs
+from routers import scrub, translate, jobs, pdf
 
 app = FastAPI(title="TamangNetra API")
 
@@ -15,6 +15,7 @@ app.add_middleware(
 app.include_router(scrub.router)
 app.include_router(translate.router)
 app.include_router(jobs.router)
+app.include_router(pdf.router)
 
 @app.get("/health")
 def health():
