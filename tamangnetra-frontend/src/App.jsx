@@ -6,8 +6,8 @@ const MAX_CHARS = 200;
 
 const LANGUAGES = [
   { code: "English", label: "English", flag: "🇬🇧", short: "EN" },
-  { code: "Nepali",  label: "नेपाली",  flag: "🇳🇵", short: "NE" },
-  { code: "Tamang",  label: "Tamang",  flag: "🏔️", short: "TM" },
+  { code: "Nepali", label: "नेपाली", flag: "🇳🇵", short: "NE" },
+  { code: "Tamang", label: "Tamang", flag: "🏔️", short: "TM" },
 ];
 
 const ACCEPTED_FORMATS = {
@@ -277,7 +277,7 @@ function Toast({ message, onDone }) {
 
 // ─── WAVE ──────────────────────────────────────────────────────────────────
 function WaveIcon() {
-  return <div className="tn-wave">{[1,2,3,4].map(i => <span key={i}/>)}</div>;
+  return <div className="tn-wave">{[1, 2, 3, 4].map(i => <span key={i} />)}</div>;
 }
 
 // ─── LANGUAGE BAR ──────────────────────────────────────────────────────────
@@ -466,13 +466,13 @@ function QuickTranslate() {
 function FileTranslate() {
   const [srcLang, setSrcLang] = useState("English");
   const [tgtLang, setTgtLang] = useState("Nepali");
-  const [file, setFile]       = useState(null);
+  const [file, setFile] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [progress, setProgress] = useState(null); // {current, total, pct}
-  const [output, setOutput]   = useState(null);   // {url, filename, paragraphs, translated}
+  const [output, setOutput] = useState(null);   // {url, filename, paragraphs, translated}
   const [glossary, setGlossary] = useState([]);
   const [glossOpen, setGlossOpen] = useState(true);
-  const [error, setError]     = useState("");
+  const [error, setError] = useState("");
   const [highlightIdx, setHighlightIdx] = useState(null);
   const esRef = useRef(null);
   const dropRef = useRef();
@@ -669,15 +669,15 @@ function ImageTranslate() {
   const [srcLang, setSrcLang] = useState("English");
   const [tgtLang, setTgtLang] = useState("Nepali");
   const [imgFile, setImgFile] = useState(null);
-  const [imgUrl,  setImgUrl]  = useState(null);
+  const [imgUrl, setImgUrl] = useState(null);
   const [regions, setRegions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [startPt, setStartPt] = useState(null);
-  const [selBox,  setSelBox]  = useState(null);
-  const [error,   setError]   = useState("");
+  const [selBox, setSelBox] = useState(null);
+  const [error, setError] = useState("");
   const canvasRef = useRef();
-  const imgRef    = useRef();
+  const imgRef = useRef();
 
   const handleImgSelect = (f) => {
     if (!f) return;
@@ -716,8 +716,10 @@ function ImageTranslate() {
   const handleCanvasMouseMove = (e) => {
     if (!drawing || !startPt) return;
     const cur = getCanvasCoords(e);
-    setSelBox({ x: Math.min(startPt.x, cur.x), y: Math.min(startPt.y, cur.y),
-      w: Math.abs(cur.x - startPt.x), h: Math.abs(cur.y - startPt.y) });
+    setSelBox({
+      x: Math.min(startPt.x, cur.x), y: Math.min(startPt.y, cur.y),
+      w: Math.abs(cur.x - startPt.x), h: Math.abs(cur.y - startPt.y)
+    });
   };
   const handleCanvasMouseUp = async () => {
     setDrawing(false);
@@ -760,24 +762,30 @@ function ImageTranslate() {
               style={{ width: "100%", borderRadius: 10, display: "block", userSelect: "none" }} />
             {/* Selection canvas overlay */}
             <canvas ref={canvasRef}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
-                cursor: "crosshair", borderRadius: 10 }}
+              style={{
+                position: "absolute", inset: 0, width: "100%", height: "100%",
+                cursor: "crosshair", borderRadius: 10
+              }}
               onMouseDown={handleCanvasMouseDown}
               onMouseMove={handleCanvasMouseMove}
               onMouseUp={handleCanvasMouseUp}
             />
             {/* Draw selection box */}
             {selBox && (
-              <div style={{ position: "absolute", border: "2px solid #f5a623",
+              <div style={{
+                position: "absolute", border: "2px solid #f5a623",
                 background: "rgba(245,166,35,0.08)", pointerEvents: "none", borderRadius: 4,
-                left: selBox.x, top: selBox.y, width: selBox.w, height: selBox.h }} />
+                left: selBox.x, top: selBox.y, width: selBox.w, height: selBox.h
+              }} />
             )}
             {/* Overlay translated regions */}
             {regions.map((r, i) => (
-              <div key={i} style={{ position: "absolute", left: r.x, top: r.y + r.h + 4,
+              <div key={i} style={{
+                position: "absolute", left: r.x, top: r.y + r.h + 4,
                 background: "rgba(13,13,26,0.92)", border: "1px solid #f5a623",
                 borderRadius: 6, padding: "3px 8px", fontSize: "0.78rem", color: "#f5a623",
-                pointerEvents: "none", maxWidth: r.w || 200, lineHeight: 1.4 }}>
+                pointerEvents: "none", maxWidth: r.w || 200, lineHeight: 1.4
+              }}>
                 {r.translated}
               </div>
             ))}
@@ -823,12 +831,12 @@ function ImageTranslate() {
 
 // ─── SECTION: YOUTUBE ───────────────────────────────────────────────────────
 function YouTubeTranslate() {
-  const [url, setUrl]         = useState("");
+  const [url, setUrl] = useState("");
   const [srcLang, setSrcLang] = useState("English");
   const [tgtLang, setTgtLang] = useState("Nepali");
-  const [subs,    setSubs]    = useState([]);
+  const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
+  const [error, setError] = useState("");
   const [playing, setPlaying] = useState(false);
   const synthRef = useRef(window.speechSynthesis);
 
@@ -927,10 +935,10 @@ function YouTubeTranslate() {
 
 // ─── NAV ───────────────────────────────────────────────────────────────────
 const TABS = [
-  { id: "text",    label: "Text" },
-  { id: "file",    label: "Files",    badge: "PDF·DOCX·CSV" },
-  { id: "image",   label: "Images",   badge: "OCR" },
-  { id: "youtube", label: "YouTube",  badge: "SRT" },
+  { id: "text", label: "Text" },
+  { id: "file", label: "Files", badge: "PDF·DOCX·CSV" },
+  { id: "image", label: "Images", badge: "OCR" },
+  { id: "youtube", label: "YouTube", badge: "SRT" },
 ];
 
 // ─── ROOT APP ──────────────────────────────────────────────────────────────
@@ -962,9 +970,9 @@ export default function App() {
       <hr className="tn-divider" />
 
       {/* SECTIONS */}
-      {tab === "text"    && <QuickTranslate />}
-      {tab === "file"    && <FileTranslate />}
-      {tab === "image"   && <ImageTranslate />}
+      {tab === "text" && <QuickTranslate />}
+      {tab === "file" && <FileTranslate />}
+      {tab === "image" && <ImageTranslate />}
       {tab === "youtube" && <YouTubeTranslate />}
 
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
