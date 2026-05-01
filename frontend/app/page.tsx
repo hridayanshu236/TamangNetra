@@ -38,6 +38,7 @@ import { translateWithPII } from "@/src/hooks/use-pii-translation";
 import { TypewriterEffect } from "@/src/components/tamangnetra/TypewriterEffect";
 import { PdfViewer } from "@/src/components/tamangnetra/PdfViewer";
 import { TranslatedDocViewer, type DocViewerFileType } from "@/src/components/tamangnetra/TranslatedDocViewer";
+import YouTube, { type YouTubePlayer } from "react-youtube";
 
 const LANGUAGE_OPTIONS = ["English", "Nepali", "Tamang"] as const;
 
@@ -190,6 +191,9 @@ export default function Home() {
   const [downloadingDoc, setDownloadingDoc] = useState(false);
   // Cached translated PDF blob — fetched once, reused for both download and view
   const [translatedDocBlob, setTranslatedDocBlob] = useState<Blob | null>(null);
+  const [youtubePlayerTime, setYoutubePlayerTime] = useState(0);
+  const [youtubePlayerReady, setYoutubePlayerReady] = useState(false);
+  const playerRef = useRef<YouTubePlayer | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -461,6 +465,46 @@ export default function Home() {
     }
   };
 
+  const parseSrtTimeToSeconds = (timeStr: string): number => {
+    try {
+      const [hms, ms] = timeStr.replace(".", ",").split(",");
+      const parts = hms.split(":");
+      let h = 0, m = 0, s = 0;
+      if (parts.length === 3) {
+        [h, m, s] = parts.map(Number);
+      } else if (parts.length === 2) {
+        [m, s] = parts.map(Number);
+      } else {
+        s = Number(parts[0]);
+      }
+      return h * 3600 + m * 60 + s + (Number(ms || 0) / 1000);
+    } catch {
+      return 0;
+    }
+  };
+
+  useEffect(() => {
+    if (youtubeStatus !== "success" || !youtubePlayerReady || !playerRef.current) return;
+
+    const interval = setInterval(() => {
+      if (playerRef.current) {
+        try {
+          setYoutubePlayerTime(playerRef.current.getCurrentTime());
+        } catch (e) {
+          // Player might be unmounted or in error state
+        }
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [youtubeStatus, youtubePlayerReady]);
+
+  const activeSubtitle = translatedYoutubeSubtitles.find(sub => {
+    const start = parseSrtTimeToSeconds(sub.startTime);
+    const end = parseSrtTimeToSeconds(sub.endTime);
+    return youtubePlayerTime >= start && youtubePlayerTime <= end;
+  });
+
   const fetchYoutubeSubtitles = async () => {
     if (!youtubeUrl.trim()) {
       return;
@@ -663,8 +707,9 @@ export default function Home() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
+          suppressHydrationWarning
         >
-          <Tabs defaultValue="translate" className="space-y-4">
+          <Tabs defaultValue="documents" className="space-y-4">
           <TabsList className="grid h-auto w-full grid-cols-3 gap-2">
             <TabsTrigger value="translate">Translate</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -1112,16 +1157,64 @@ export default function Home() {
                   />
                 </div>
 
-                {youtubeTitle ? (
-                  <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
-                    <p className="font-medium text-foreground">
-                      {youtubeTitle}
-                    </p>
-                    {youtubeVideoId ? (
-                      <p className="text-xs">Video ID: {youtubeVideoId}</p>
+                {youtubeVideoId && (
+                  <div className="space-y-4">
+                    <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black shadow-2xl group">
+                      <YouTube
+                        videoId={youtubeVideoId}
+                        onReady={(event) => { 
+                          playerRef.current = event.target; 
+                          setYoutubePlayerReady(true);
+                        }}
+                        className="absolute inset-0 w-full h-full"
+                        opts={{
+                          width: "100%",
+                          height: "100%",
+                          playerVars: {
+                            autoplay: 0,
+                            modestbranding: 1,
+                            rel: 0,
+                          },
+                        }}
+                      />
+                      
+                      {/* Subtitle Overlay */}
+                      <AnimatePresence>
+                        {activeSubtitle && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 5 }}
+                            className="absolute bottom-10 left-0 right-0 px-8 text-center pointer-events-none z-10"
+                          >
+                            <span 
+                              className="inline-block px-4 py-2 rounded-lg bg-black/70 backdrop-blur-md text-white text-lg sm:text-xl md:text-2xl font-medium shadow-lg border border-white/10"
+                              style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
+                            >
+                              {activeSubtitle.translated}
+                            </span>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      {/* Playback Progress Indicator (Subtle) */}
+                      <div className="absolute top-0 left-0 h-1 bg-emerald-500 transition-all duration-100 ease-linear z-20" 
+                           style={{ width: `${playerRef.current ? (youtubePlayerTime / playerRef.current.getDuration()) * 100 : 0}%` }} />
+                    </div>
+
+                    {youtubeTitle ? (
+                      <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-foreground">{youtubeTitle}</p>
+                          <p className="text-xs">Video ID: {youtubeVideoId}</p>
+                        </div>
+                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                          {translatedYoutubeSubtitles.length} Translated Segments
+                        </Badge>
+                      </div>
                     ) : null}
                   </div>
-                ) : null}
+                )}
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <Card className="border-dashed">
