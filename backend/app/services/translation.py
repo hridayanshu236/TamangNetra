@@ -80,7 +80,7 @@ class TranslationService:
         }
 
         max_retries = 5
-        RATE_LIMIT_WAIT = 62.0
+        import random
 
         async with httpx.AsyncClient() as client:
             for attempt in range(max_retries):
@@ -92,21 +92,35 @@ class TranslationService:
                         timeout=30.0
                     )
 
-                    if response.status_code == 429:
+                    if response.status_code == 429 or response.status_code >= 500:
                         if attempt < max_retries - 1:
+                            # Exponential backoff with jitter
+                            retry_after = response.headers.get("Retry-After")
+                            if retry_after and retry_after.isdigit():
+                                wait = float(retry_after)
+                            else:
+                                base_wait = 2.0 ** attempt
+                                jitter = random.uniform(1.0, 5.0)
+                                wait = base_wait + jitter
+                                
                             logger.warning(
-                                f"Rate limited (429). Waiting {RATE_LIMIT_WAIT}s "
+                                f"API returned {response.status_code}. Waiting {wait:.2f}s "
                                 f"before retry {attempt + 1}/{max_retries - 1}..."
                             )
-                            await asyncio.sleep(RATE_LIMIT_WAIT)
+                            await asyncio.sleep(wait)
                             continue
-                        raise ValueError("TMT API rate limit exceeded after all retries.")
+                        
+                        if response.status_code == 429:
+                            raise ValueError("TMT API rate limit exceeded after all retries.")
+                        else:
+                            raise ValueError(f"TMT API returned {response.status_code}: {response.text}")
 
                     response.raise_for_status()
                     data = response.json()
 
                     if data.get("message_type") == "FAIL":
                         raise ValueError(data.get("message", "TMT translation failed"))
+
 
                     translated_text = data.get("output") or request.text
                     return TranslationResponse(
@@ -203,7 +217,7 @@ class TranslationService:
             logger.info(f"Cache misses ({len(uncached_indices)}/{total}): {misses}")
 
         # ── Phase 2: Translate uncached texts concurrently ────────────────────
-        MAX_CONCURRENT = 20
+        MAX_CONCURRENT = 5
         semaphore = asyncio.Semaphore(MAX_CONCURRENT)
         lock = asyncio.Lock()
 

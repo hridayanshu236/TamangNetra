@@ -83,33 +83,49 @@ async function fetchYouTubeCaptionsFull(
   let transcriptItems = null;
 
   // Step 1: Try with preferred language if provided
-  if (preferredLang) {
+  if (preferredLang && preferredLang !== 'en') {
     try {
       transcriptItems = await YoutubeTranscript.fetchTranscript(videoId, {
         lang: preferredLang,
       });
+      console.log(`Successfully fetched transcript in preferred lang: ${preferredLang}`);
     } catch (err) {
       console.warn(
-        `Transcript not found for lang "${preferredLang}", trying without lang:`,
-        err instanceof Error ? err.message : 'Unknown'
+        `Transcript not found for lang "${preferredLang}", falling back to English.`
       );
     }
   }
 
-  // Step 2: Try without any language filter (grabs first available track)
+  // Step 2: If preferred lang failed or wasn't provided (or was 'en'), try fetching English.
+  if (!transcriptItems || transcriptItems.length === 0) {
+    try {
+      transcriptItems = await YoutubeTranscript.fetchTranscript(videoId, {
+        lang: 'en',
+      });
+      console.log('Successfully fetched transcript in English.');
+    } catch (err) {
+      console.warn(
+        'English transcript not found. Trying any available transcript.'
+      );
+    }
+  }
+
+  // Step 3: As a last resort, try fetching any available transcript.
   if (!transcriptItems || transcriptItems.length === 0) {
     try {
       transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
+      console.log('Successfully fetched first available transcript as a fallback.');
     } catch (err) {
-      console.warn(
-        'Transcript fetch failed entirely, using demo:',
+      console.error(
+        'Could not fetch any transcript, falling back to demo.',
         err instanceof Error ? err.message : 'Unknown'
       );
     }
   }
 
-  // Step 3: Fall back to demo if nothing worked
+  // Step 4: Fall back to demo if nothing worked
   if (!transcriptItems || transcriptItems.length === 0) {
+    console.log('All transcript fetches failed. Using demo subtitles.');
     return {
       subtitles: generateDemoSubtitles(videoId),
       title: 'YouTube Video (Demo)',

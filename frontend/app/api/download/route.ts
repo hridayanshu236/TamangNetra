@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import Papa from 'papaparse';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import {
   Document,
@@ -223,7 +223,7 @@ async function reconstructPDF(
       y,
       size: 16,
       font: customFont,
-      color: { type: 'RGB', red: 0.1, green: 0.5, blue: 0.4 },
+      color: rgb(0.1, 0.5, 0.4),
     });
     y -= 30;
 
@@ -262,17 +262,10 @@ async function reconstructPDF(
             y,
             size: FONT_SIZE,
             font: customFont,
-            color: { type: 'RGB', red: 0.2, green: 0.2, blue: 0.2 },
+            color: rgb(0.2, 0.2, 0.2),
           });
         } catch {
           // If character encoding fails, skip the line
-          page.drawText('[text could not be rendered]', {
-            x: MARGIN,
-            y,
-            size: FONT_SIZE,
-            font: customFont,
-            color: { type: 'RGB', red: 0.6, green: 0.6, blue: 0.6 },
-          });
         }
         y -= LINE_HEIGHT;
       }
@@ -289,10 +282,11 @@ async function reconstructPDF(
       y,
       size: 14,
       font: customFont,
-      color: { type: 'RGB', red: 0.5, green: 0.5, blue: 0.5 },
+      color: rgb(0.5, 0.5, 0.5),
     });
     y -= 30;
 
+    // Original text
     for (const seg of translatedSegments) {
       const lines = wrapText(seg.original);
 
@@ -308,16 +302,10 @@ async function reconstructPDF(
             y,
             size: FONT_SIZE,
             font: customFont,
-            color: { type: 'RGB', red: 0.5, green: 0.5, blue: 0.5 },
+            color: rgb(0.5, 0.5, 0.5),
           });
         } catch {
-          page.drawText('[text could not be rendered]', {
-            x: MARGIN,
-            y,
-            size: FONT_SIZE,
-            font: customFont,
-            color: { type: 'RGB', red: 0.7, green: 0.7, blue: 0.7 },
-          });
+          // If character encoding fails, skip the line
         }
         y -= LINE_HEIGHT;
       }

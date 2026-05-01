@@ -36,68 +36,78 @@ class DocumentProcessor:
         self.translation_service = translation_service
 
     async def process_pdf(self, file_content: bytes) -> str:
-        """Extract text and OCR images from PDF."""
-        text_segments = []
+        """Extract text from PDF block-by-block with OCR fallback."""
         doc = fitz.open(stream=file_content, filetype="pdf")
-        
+        text_segments = []
         for page_num in range(len(doc)):
             page = doc.load_page(page_num)
-            # Extract standard text
-            text = page.get_text()
-            if text.strip():
-                text_segments.append(text)
-                
-            # Extract images and apply OCR
-            image_list = page.get_images(full=True)
-            for img_index, img in enumerate(image_list):
-                xref = img[0]
-                base_image = doc.extract_image(xref)
-                image_bytes = base_image["image"]
-                
-                try:
-                    image = Image.open(io.BytesIO(image_bytes))
-                    ocr_text = pytesseract.image_to_string(image)
-                    if ocr_text.strip():
-                        text_segments.append(f"--- Image {img_index+1} OCR ---\n{ocr_text.strip()}")
-                except Exception as e:
-                    logger.debug(f"OCR skipped for image {img_index} (tesseract not available): {e}")
-                    
-        return "\n\n".join(text_segments)
+            blocks = page.get_text("dict")["blocks"]
+            found_text = False
+            for block in blocks:
+                if block.get("type") == 0:  # text block
+                    block_text = ""
+                    for line in block["lines"]:
+                        for span in line["spans"]:
+                            block_text += span["text"]
+                        if not block_text.endswith(" ") and not block_text.endswith("-"):
+                            block_text += " "
+                    if block_text.strip():
+                        text_segments.append(block_text.strip())
+                        found_text = True
+            
+            # If no text found on page, try OCR on images
+            if not found_text:
+                image_list = page.get_images(full=True)
+                for img_index, img in enumerate(image_list):
+                    xref = img[0]
+                    base_image = doc.extract_image(xref)
+                    image_bytes = base_image["image"]
+                    try:
+                        image = Image.open(io.BytesIO(image_bytes))
+                        ocr_text = pytesseract.image_to_string(image)
+                        if ocr_text.strip():
+                            text_segments.append(ocr_text.strip())
+                    except Exception as e:
+                        logger.debug(f"OCR skipped for page {page_num}: {e}")
+                        
+        return "---EXACT-BLOCK---".join(text_segments)
 
     async def process_docx(self, file_content: bytes) -> str:
-        """Extract text from DOCX."""
+        """Extract text from DOCX run-by-run to match reconstruction exactly."""
         doc = DocxDocument(io.BytesIO(file_content))
-        text_segments = []
-        for paragraph in doc.paragraphs:
-            if paragraph.text.strip():
-                text_segments.append(paragraph.text.strip())
-                
+        run_texts = []
+        
+        def _collect_runs(paragraphs):
+            for para in paragraphs:
+                for run in para.runs:
+                    if run.text.strip():
+                        run_texts.append(run.text)
+
+        for para in doc.paragraphs:
+            _collect_runs([para])
+
         for table in doc.tables:
             for row in table.rows:
-                row_text = " | ".join([cell.text.strip() for cell in row.cells if cell.text.strip()])
-                if row_text:
-                    text_segments.append(row_text)
+                for cell in row.cells:
+                    _collect_runs(cell.paragraphs)
                     
-        return "\n".join(text_segments)
+        return "---EXACT-BLOCK---".join(run_texts)
 
     async def process_spreadsheet(self, file_content: bytes, file_type: str) -> str:
-        """Extract text from CSV or Excel."""
+        """Extract text from CSV or Excel cell-by-cell to match reconstruction."""
         if file_type == 'csv':
             df = pd.read_csv(io.BytesIO(file_content))
         else:
             df = pd.read_excel(io.BytesIO(file_content))
             
-        text_segments = []
-        # Join column names
-        text_segments.append(" | ".join([str(col) for col in df.columns]))
-        
-        # Join row values
+        cells = list(df.columns)
         for _, row in df.iterrows():
-            row_text = " | ".join([str(val) for val in row.values if pd.notna(val)])
-            if row_text.strip():
-                text_segments.append(row_text)
+            for val in row.values:
+                cells.append(str(val) if pd.notna(val) else "")
                 
-        return "\n".join(text_segments)
+        # Filter empty and join with PAGE-BREAK so they are processed as isolated blocks
+        cells = [c for c in cells if str(c).strip()]
+        return "---PAGE-BREAK---".join(cells)
 
     async def process_image(self, file_content: bytes) -> str:
         """Apply OCR directly to an image file."""
@@ -169,18 +179,36 @@ class DocumentProcessor:
             raise ValueError(f"Error processing document: {str(e)}")
 
     def _split_into_sentences(self, text: str) -> list[str]:
-        """Split text into sentences matching the processing logic exactly."""
-        segments = []
-        for line in text.split('\n'):
-            line = line.strip()
-            if not line:
+        """
+        Split text into sentences.
+        We split by blocks (pages) first to ensure 100% cache hits 
+        during reconstruction while remaining immune to line breaks.
+        """
+        if "---EXACT-BLOCK---" in text:
+            # DOCX uses exact blocks run-by-run without sentence splitting
+            return [b for b in text.split("---EXACT-BLOCK---") if b.strip()]
+
+        all_segments = []
+        # Split by our internal page marker if present
+        blocks = text.split("---PAGE-BREAK---")
+        
+        for block in blocks:
+            # 1. Normalize ALL whitespace within this block into single spaces
+            block = re.sub(r'\s+', ' ', block).strip()
+            if not block:
                 continue
-            line_sentences = [s.strip() for s in re.split(r'(?<=[.!?।])\s+', line) if s.strip()]
+                
+            # 2. Split into sentences using punctuation boundaries
+            # Supports English (.!?) and Devanagari (।)
+            line_sentences = [s.strip() for s in re.split(r'(?<=[.!?।])\s+', block) if s.strip()]
+            
             for s in line_sentences:
+                # 3. Standardize sentence endings
                 if not re.search(r'[.!?।]$', s):
                     s += '.'
-                segments.append(s)
-        return segments
+                all_segments.append(s)
+                
+        return all_segments
 
     async def reconstruct_file(self, file: UploadFile, src_lang: str, tgt_lang: str) -> tuple[bytes, str]:
         """Reconstruct the translated file with exact layout/formatting."""
@@ -207,83 +235,24 @@ class DocumentProcessor:
         is_devanagari = tgt_lang.lower() in ("nepali", "ne", "tamang", "tam")
         font_bytes = None
         if is_devanagari:
-            font_bytes = _get_font_bytes(
-                "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/"
-                "NotoSansDevanagari/NotoSansDevanagari-Regular.ttf"
-            )
+            try:
+                # Direct link to Noto Sans Devanagari Regular
+                font_url = "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansdevanagari/NotoSansDevanagari-Regular.ttf"
+                font_bytes = _get_font_bytes(font_url)
+            except Exception as e:
+                logger.error(f"Failed to download Devanagari font: {e}")
 
         # ── Collect per-page data using EXACT SAME extraction as process_pdf ──
-        # process_pdf uses page.get_text() → _split_into_sentences() on full page text.
-        # We do the same here to guarantee 100% cache key alignment.
-        MATH_FONT_HINTS = ("math", "sym", "cmsy", "cmmi", "cmmib", "msam", "msbm", "euex", "stix", "xits")
-        REDACT_FLAGS = fitz.PDF_REDACT_IMAGE_NONE
-        try:
-            REDACT_FLAGS |= fitz.PDF_REDACT_LINE_ART_NONE  # Added in PyMuPDF 1.23
-        except AttributeError:
-            pass
-
-        page_data = []  # [(page, sentences, all_spans, first_point, first_size)]
-        all_sentences_flat = []
+        page_blocks_data = []
+        all_blocks_text = []
 
         for page in doc:
-            # Step 1: page.get_text() — exactly like process_pdf
-            page_text = page.get_text()
-            if not page_text.strip():
-                continue
-
-            # Step 2: _split_into_sentences — exactly like process_file
-            sentences = self._split_into_sentences(page_text)
-            if not sentences:
-                continue
-
-            # Step 3: Collect spans for redaction (skip math glyphs to preserve formulas)
-            all_spans = []
-            first_point = None
-            first_size = 11.0
+            page_blocks = []
+            img_rects = []
             blocks = page.get_text("dict")["blocks"]
+            
             for block in blocks:
-                if "lines" not in block:
-                    continue
-                for line in block["lines"]:
-                    for span in line["spans"]:
-                        if not span["text"].strip():
-                            continue
-                        font_name = span.get("font", "").lower()
-                        if any(h in font_name for h in MATH_FONT_HINTS):
-                            continue  # preserve math formula glyphs
-                        all_spans.append(span)
-                        if first_point is None:
-                            first_point = fitz.Point(span["bbox"][0], span["bbox"][3])
-                            first_size = span["size"]
-
-            if not all_spans or first_point is None:
-                continue
-
-            page_data.append((page, sentences, all_spans, first_point, first_size))
-            all_sentences_flat.extend(sentences)
-
-        if not page_data:
-            return doc.write()
-
-        # ── Batch-translate ALL sentences — guaranteed 100% cache hits ─────────
-        translated_flat = await self.translation_service.batch_translate(
-            all_sentences_flat, src_lang, tgt_lang
-        )
-
-        # ── Per-page: redact text spans, then insert translated text ──────────
-        # Key: call insert_font AFTER apply_redactions so the font survives the
-        # content-stream rebuild. Then insert_text with that fontname works fine.
-        sent_idx = 0
-        target_font = "F0" if font_bytes else "helv"
-        for page, sentences, all_spans, first_point, first_size in page_data:
-            page_translated = translated_flat[sent_idx: sent_idx + len(sentences)]
-            sent_idx += len(sentences)
-            translated_page_text = " ".join(page_translated)
-
-            # Collect image bboxes so we can skip text spans that overlap images
-            img_rects: list[fitz.Rect] = []
-            for block in page.get_text("dict")["blocks"]:
-                if block.get("type") == 1:  # image block
+                if block.get("type") == 1:
                     img_rects.append(fitz.Rect(block["bbox"]))
 
             def overlaps_image(bbox: fitz.Rect) -> bool:
@@ -293,55 +262,94 @@ class DocumentProcessor:
                         return True
                 return False
 
-            # Redact with white fill to visually erase original text.
-            # Skip spans that significantly overlap image areas.
-            for span in all_spans:
-                span_rect = fitz.Rect(span["bbox"])
-                if overlaps_image(span_rect):
-                    continue  # don't redact over images
-                page.add_redact_annot(span_rect, fill=(1, 1, 1))
+            found_any = False
+            for block in blocks:
+                if block.get("type") == 0:
+                    rect = fitz.Rect(block["bbox"])
+                    # Safeguard: Skip background blocks that cover most of the page
+                    if rect.width > page.rect.width * 0.8 and rect.height > page.rect.height * 0.8:
+                        continue
 
-            page.apply_redactions(images=REDACT_FLAGS)
+                    block_text = ""
+                    first_size = 11.0
+                    for line in block["lines"]:
+                        for span in line["spans"]:
+                            block_text += span["text"]
+                            first_size = span.get("size", first_size)
+                        if not block_text.endswith(" ") and not block_text.endswith("-"):
+                            block_text += " "
+                            
+                    block_text = block_text.strip()
+                    if block_text:
+                        all_blocks_text.append(block_text)
+                        page_blocks.append({
+                            "rect": rect,
+                            "size": first_size,
+                            "overlaps_image": overlaps_image(rect),
+                            "is_ocr": False
+                        })
+                        found_any = True
+            
+            # OCR fallback for reconstruction
+            if not found_any:
+                image_list = page.get_images(full=True)
+                for img in image_list:
+                    xref = img[0]
+                    bbox = page.get_image_bbox(img)
+                    base_image = doc.extract_image(xref)
+                    try:
+                        image = Image.open(io.BytesIO(base_image["image"]))
+                        ocr_text = pytesseract.image_to_string(image).strip()
+                        if ocr_text:
+                            all_blocks_text.append(ocr_text)
+                            page_blocks.append({
+                                "rect": bbox,
+                                "size": 12.0,
+                                "overlaps_image": False,
+                                "is_ocr": True
+                            })
+                    except: continue
 
-            # Register font AFTER apply_redactions (rebuilds content stream).
-            # Registering before would lose the reference.
+            page_blocks_data.append((page, page_blocks))
+
+        if not all_blocks_text:
+            return doc.write()
+
+        translated = await self.translation_service.batch_translate(
+            all_blocks_text, src_lang, tgt_lang
+        )
+
+        idx = 0
+        
+        for page, page_blocks in page_blocks_data:
+            # Register font and get the internal name (e.g. 'f0')
+            registered_font = "helv"
             if font_bytes:
-                page.insert_font(fontname="F0", fontbuffer=font_bytes)
-
-            logger.info(
-                f"Reconstruct page: {len(sentences)} sentences → "
-                f"'{translated_page_text[:60]}...'"
-            )
-
-            # Insert translated text using a textbox to handle wrapping and avoid going off-screen
-            if translated_page_text.strip():
                 try:
-                    # Define a rectangle starting from the first text position, 
-                    # spanning to the right margin, and down to the bottom margin.
-                    margin = 50
-                    # PyMuPDF points: first_point.y is the baseline. 
-                    # Move up by first_size to get the top of the box.
-                    rect = fitz.Rect(
-                        first_point.x,
-                        first_point.y - first_size,
-                        page.rect.width - margin,
-                        page.rect.height - margin
-                    )
-                    
-                    # If the rectangle is too small (e.g. text starts at the bottom),
-                    # expand it to at least half the page height to allow flow.
-                    if rect.height < 100:
-                        rect.y1 = page.rect.height - margin
-
-                    page.insert_textbox(
-                        rect,
-                        translated_page_text,
-                        fontsize=first_size,
-                        fontname=target_font,
-                        align=0 # 0=left, 1=center, 2=right
-                    )
+                    registered_font = page.insert_font(fontname="noto", fontbuffer=font_bytes)
                 except Exception as e:
-                    logger.warning(f"insert_textbox failed on page: {e}")
+                    logger.error(f"Page font insertion failed: {e}")
+            
+            for b in page_blocks:
+                trans_text = translated[idx]
+                idx += 1
+                
+                if not b["overlaps_image"]:
+                    try:
+                        # 1. Clear the original text area with a white box
+                        page.draw_rect(b["rect"], color=(1, 1, 1), fill=(1, 1, 1), overlay=True)
+                        
+                        # 2. Insert translated text using the registered font name
+                        page.insert_textbox(
+                            b["rect"],
+                            trans_text,
+                            fontsize=b["size"],
+                            fontname=registered_font,
+                            align=0,
+                            color=(0, 0, 0)
+                        )
+                    except Exception as e:
+                        logger.warning(f"Text insertion failed for block: {e}")
 
         return doc.write()
 

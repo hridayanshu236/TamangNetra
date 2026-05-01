@@ -36,11 +36,13 @@ import { Skeleton } from "@/src/components/ui/skeleton";
 import { apiClient, type HealthResponse } from "@/src/lib/api-client";
 import { translateWithPII } from "@/src/hooks/use-pii-translation";
 import { TypewriterEffect } from "@/src/components/tamangnetra/TypewriterEffect";
+import { PdfViewer } from "@/src/components/tamangnetra/PdfViewer";
+import { TranslatedDocViewer, type DocViewerFileType } from "@/src/components/tamangnetra/TranslatedDocViewer";
 
 const LANGUAGE_OPTIONS = ["English", "Nepali", "Tamang"] as const;
 
 type Language = (typeof LANGUAGE_OPTIONS)[number];
-type DocumentFileType = "pdf" | "docx" | "csv" | "tsv";
+type DocumentFileType = "pdf" | "docx" | "csv" | "tsv" | "xlsx" | "xls";
 
 type ProcessFileSegment = {
   original: string;
@@ -182,6 +184,13 @@ export default function Home() {
     "idle" | "loading" | "success" | "error"
   >("idle");
 
+  const [showPdfViewer, setShowPdfViewer] = useState(false);
+  const [showDocViewer, setShowDocViewer] = useState(false);
+  const [viewingFile, setViewingFile] = useState<File | null>(null);
+  const [downloadingDoc, setDownloadingDoc] = useState(false);
+  // Cached translated PDF blob — fetched once, reused for both download and view
+  const [translatedDocBlob, setTranslatedDocBlob] = useState<Blob | null>(null);
+
   useEffect(() => {
     let active = true;
 
@@ -204,6 +213,16 @@ export default function Home() {
       active = false;
     };
   }, []);
+
+  // Keyboard navigation for PDF viewer
+  useEffect(() => {
+    if (!showPdfViewer) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowPdfViewer(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [showPdfViewer]);
 
   const translatePlainText = async () => {
     setTranslateStatus("loading");
@@ -236,6 +255,7 @@ export default function Home() {
     setDocumentFile(file);
     setDocumentFileType(file ? getDocumentType(file.name) : null);
     setDocumentFileBase64("");
+    setTranslatedDocBlob(null); // Reset cached blob on new file
 
     if (!file) return;
 
@@ -369,21 +389,18 @@ export default function Home() {
     }
   };
 
-  const downloadTranslatedDocument = async () => {
-    if (!documentFile || !documentFileType || !documentResult) {
-      return;
-    }
+  /** Fetch (or return cached) translated document blob from the backend reconstruct endpoint. */
+  const getTranslatedDocBlob = async (): Promise<Blob | null> => {
+    if (translatedDocBlob) return translatedDocBlob;
+    if (!documentFile || !documentFileType || !documentResult) return null;
 
-    // For simple text or images, we just download the translated text as a .txt file
+    // Plain text / images — reconstruct inline, no backend call needed
     if (["txt", "image", "jpg", "jpeg", "png"].includes(documentFileType)) {
       const blob = new Blob([documentResult.translated], { type: "text/plain;charset=utf-8" });
-      const baseName = documentFile.name.replace(/\.[^.]+$/, "");
-      downloadBlob(blob, `translated_${baseName}.txt`);
-      return;
+      setTranslatedDocBlob(blob);
+      return blob;
     }
 
-    // For Track 2 formatted documents (PDF, DOCX, CSV, Excel), use the backend reconstruct endpoint
-    // which modifies the original document in-place to perfectly preserve layout and formatting.
     const formData = new FormData();
     formData.append("file", documentFile);
     formData.append("src_lang", sourceLanguage);
@@ -395,18 +412,53 @@ export default function Home() {
     });
 
     if (!response.ok) {
-      const err = await response.text();
-      console.error("Document reconstruction failed:", err);
-      // Fallback: If reconstruct fails, just download the raw text
-      const blob = new Blob([documentResult.translated], { type: "text/plain;charset=utf-8" });
-      const baseName = documentFile.name.replace(/\.[^.]+$/, "");
-      downloadBlob(blob, `translated_${baseName}.txt`);
-      return;
+      console.error("Document reconstruction failed:", await response.text());
+      return null;
     }
 
     const blob = await response.blob();
-    const baseName = documentFile.name.replace(/\.[^.]+$/, "");
-    downloadBlob(blob, `translated_${baseName}.${documentFileType}`);
+    setTranslatedDocBlob(blob);
+    return blob;
+  };
+
+  const downloadTranslatedDocument = async () => {
+    if (!documentFile || !documentFileType || !documentResult) return;
+    setDownloadingDoc(true);
+    try {
+      const blob = await getTranslatedDocBlob();
+      if (!blob) {
+        // Fallback: download raw translated text
+        const textBlob = new Blob([documentResult.translated], { type: "text/plain;charset=utf-8" });
+        downloadBlob(textBlob, `translated_${documentFile.name.replace(/\.[^.]+$/, "")}.txt`);
+        return;
+      }
+      const ext = ["txt", "image", "jpg", "jpeg", "png"].includes(documentFileType)
+        ? "txt"
+        : documentFileType;
+      downloadBlob(blob, `translated_${documentFile.name.replace(/\.[^.]+$/, "")}.${ext}`);
+    } finally {
+      setDownloadingDoc(false);
+    }
+  };
+
+  const openTranslatedDocumentViewer = async () => {
+    if (!documentFile || !documentResult || !documentFileType) return;
+    setDownloadingDoc(true);
+    try {
+      const blob = await getTranslatedDocBlob();
+      if (!blob) return;
+      
+      if (documentFileType === "pdf") {
+        const file = new File([blob], `translated_${documentFile.name}`, { type: "application/pdf" });
+        setViewingFile(file);
+        setShowPdfViewer(true);
+      } else {
+        setTranslatedDocBlob(blob);
+        setShowDocViewer(true);
+      }
+    } finally {
+      setDownloadingDoc(false);
+    }
   };
 
   const fetchYoutubeSubtitles = async () => {
@@ -458,22 +510,22 @@ export default function Home() {
 
     setYoutubeTranslateStatus("loading");
     try {
-      const translated = [] as TranslatedSubtitleRow[];
-      for (const row of youtubeSubtitles) {
-        const response = await apiClient.translate({
-          text: row.text,
-          source_language: sourceLanguage,
-          target_language: targetLanguage,
-          include_confidence: false,
-        });
-        translated.push({
-          ...row,
-          translated: response.translated_text,
-        });
-      }
+      const textsToTranslate = youtubeSubtitles.map((row) => row.text);
+      const response = await apiClient.batchTranslate(
+        textsToTranslate,
+        sourceLanguage,
+        targetLanguage
+      );
+
+      const translated = youtubeSubtitles.map((row, index) => ({
+        ...row,
+        translated: response.translations[index] || row.text,
+      }));
+      
       setTranslatedYoutubeSubtitles(translated);
       setYoutubeTranslateStatus("success");
-    } catch {
+    } catch (e) {
+      console.error("Batch translation failed:", e);
       setYoutubeTranslateStatus("error");
     }
   };
@@ -795,7 +847,7 @@ export default function Home() {
                 >
                   <Input
                     type="file"
-                    accept=".pdf,.docx,.csv,.tsv"
+                    accept=".pdf,.docx,.csv,.tsv,.xlsx,.xls"
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
@@ -812,7 +864,7 @@ export default function Home() {
                     </motion.div>
                     <div>
                       <p className="text-base font-medium">Click or drag document here</p>
-                      <p className="text-sm text-muted-foreground mt-1">Supports PDF, DOCX, CSV, TSV</p>
+                      <p className="text-sm text-muted-foreground mt-1">Supports PDF, DOCX, CSV, Excel</p>
                     </div>
                   </div>
                 </div>
@@ -831,11 +883,29 @@ export default function Home() {
                   <Button
                     variant="outline"
                     onClick={downloadTranslatedDocument}
-                    disabled={!documentResult}
+                    disabled={!documentResult || downloadingDoc}
                   >
-                    <Download className="mr-2 size-4" />
-                    Download translated document
+                    {downloadingDoc ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 size-4" />
+                    )}
+                    {downloadingDoc ? "Building..." : "Download translated"}
                   </Button>
+                  {documentResult && (
+                    <Button
+                      variant="outline"
+                      onClick={openTranslatedDocumentViewer}
+                      disabled={downloadingDoc || (!["pdf", "docx", "csv", "tsv", "xlsx", "xls"].includes(documentFileType || ""))}
+                    >
+                      {downloadingDoc ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      ) : (
+                        <ExternalLink className="mr-2 size-4" />
+                      )}
+                      View translated {documentFileType?.toUpperCase()}
+                    </Button>
+                  )}
                   <StatusPill
                     status={documentStatus}
                     label={
@@ -1110,6 +1180,28 @@ export default function Home() {
         </motion.div>
       </main>
       </div>
+
+      {/* PDF Viewer Overlay */}
+      <AnimatePresence>
+        {showPdfViewer && viewingFile && (
+          <PdfViewer
+            file={viewingFile}
+            title={viewingFile.name}
+            onClose={() => setShowPdfViewer(false)}
+          />
+        )}
+      </AnimatePresence>
+      {/* Doc Viewer Overlay */}
+      <AnimatePresence>
+        {showDocViewer && translatedDocBlob && documentFileType && (
+          <TranslatedDocViewer
+            blob={translatedDocBlob}
+            fileType={documentFileType as DocViewerFileType}
+            fileName={documentFile?.name || "translated_document"}
+            onClose={() => setShowDocViewer(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
