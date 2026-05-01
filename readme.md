@@ -1,81 +1,51 @@
-# TamangNetra
+# TamangNetra 👁️
 
-## Overview
+TamangNetra is an advanced, high-performance document translation system designed to bridge the language gap for the Tamang and Nepali communities. It leverages state-of-the-art AI to translate documents while preserving their original layout, formatting, and images.
 
-TamangNetra is a single-project Next.js application for translation and language tools. The app is implemented inside the `frontend/` folder and includes:
-- text translation and assistant flows
-- document processing and multilingual export
-- OCR/image translation support
-- YouTube subtitle translation
-- analytics, translation memory, and glossary helpers
+## ✨ Features
 
-## Repository Structure
+- **Real-Time Translation**: Lightning-fast translation powered by the TMT API.
+- **Document Integrity**: Supports PDF, DOCX, CSV, and Excel while keeping styles (bold, italic), tables, and images intact.
+- **OCR Support**: Built-in optical character recognition for translating text within images.
+- **Smart Caching**: Persistent Knowledge Graph cache ensures that previously translated sentences are retrieved instantly at zero cost.
+- **Modern UI**: A sleek, premium dashboard with dark mode, real-time progress tracking, and interactive previews.
+- **Multi-Format Support**:
+  - **PDF**: Granular span-level redaction preserves formulas and images.
+  - **DOCX**: Run-level reconstruction maintains Microsoft Word styling.
+  - **YouTube**: Fetch and translate subtitles directly from video links.
 
-- `.env` - local environment variables used by the app
-- `frontend/` - Next.js application source code
-  - `frontend/app/` - page and API route implementation
-  - `frontend/src/components/` - reusable UI and feature components
-  - `frontend/package.json` - frontend scripts and dependencies
+## 🚀 Getting Started
 
-## Local Setup
+### Prerequisites
+- Python 3.10+
+- Node.js 18+
+- Tesseract OCR (Optional, for image translation)
 
-1. Install dependencies from the project root:
+### Quick Setup
+
+1. **Backend**:
    ```bash
-   cd TamangNetra/frontend
-   npm install
+   cd backend
+   python -m venv .venv
+   source .venv/bin/activate  # .venv\Scripts\activate on Windows
+   pip install -r requirements.txt
+   python main.py
    ```
 
-2. Start the development server:
+2. **Frontend**:
    ```bash
+   cd frontend
+   npm install
    npm run dev
    ```
 
-3. Open the app in your browser:
-   ```text
-   http://localhost:3000
-   ```
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Environment Variables
+## 🛠️ Usage
+1. **Upload**: Drag and drop your document (PDF, DOCX, etc.).
+2. **Translate**: Select your target language and click "Translate".
+3. **Review**: Watch the real-time progress and typewriter-effect preview.
+4. **Download**: Get your perfectly formatted translated document.
 
-The root `.env` file contains values used by the app. Example variables in this repository:
-
-```env
-TMT_API_TOKEN = team_xxxxxxxxx
-```
-
-If additional environment variables are required, add them to `frontend/.env` as needed.
-
-
-## Available Scripts
-
-From `frontend/`:
-
-- `npm run dev` - start the Next.js development server
-- `npm run build` - build the production app
-- `npm run start` - run the production server after build
-- `npm run lint` - run ESLint
-- `npm run db:push` - push Prisma schema to the database
-- `npm run db:generate` - generate Prisma client
-- `npm run db:migrate` - run Prisma migrations
-- `npm run db:reset` - reset Prisma migrations
-
-## API Routes
-
-The app provides internal API routes under `frontend/app/api/`, including:
-- `/api/translate`
-- `/api/youtube`
-- `/api/tts`
-- `/api/asr`
-- `/api/process-file`
-- `/api/export-bilingual`
-- `/api/download`
-- `/api/stats`
-- `/api/assistant`
-
-## Notes
-
-- The frontend is built with Next.js 16, React 19, Tailwind CSS, Prisma, and a large component library.
-- The current repository does not include a separate Python backend.
-- Use the actual `frontend/` path for installs and commands.
-
-
+## 📜 License
+© 2026 TamangNetra Team. All rights reserved.

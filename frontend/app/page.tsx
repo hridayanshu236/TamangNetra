@@ -1,979 +1,1115 @@
-'use client';
+"use client";
 
-import dynamic from 'next/dynamic';
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+import { useEffect, useState, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  Mountain,
-  Eye,
-  Heart,
-  Shield,
-  Lock,
-  Share2,
-  Type,
-  ScanLine,
-  BookOpen,
+  ArrowRightLeft,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  FileUp,
+  Loader2,
+  ShieldCheck,
   Video,
-  PenTool,
-  Volume2,
-  Code,
+  UploadCloud,
   FileText,
-  Globe,
-  ArrowUp,
-  Settings,
-} from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/src/components/ui/tabs';
-import { Separator } from '@/src/components/ui/separator';
-import { Badge } from '@/src/components/ui/badge';
-import { Button } from '@/src/components/ui/button';
+} from "lucide-react";
+import { Navbar } from "@/src/components/tamangnetra/Navbar";
+import { Badge } from "@/src/components/ui/badge";
+import { Button } from "@/src/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/src/components/ui/sheet';
-
-import { Navbar } from '@/src/components/tamangnetra/Navbar';
-import { TranslationHistory, HistoryButton, useTranslationHistory } from '@/src/components/tamangnetra/TranslationHistory';
-import { bindHistorySaver } from '@/src/components/tamangnetra/TranslationStore';
-import { Hero } from '@/src/components/tamangnetra/Hero';
-import { StatsSection } from '@/src/components/tamangnetra/StatsSection';
-import { FeatureBadges } from '@/src/components/tamangnetra/FeatureBadges';
-import { TranslationSettings } from '@/src/components/tamangnetra/TranslationSettings';
-import { FileTranslator } from '@/src/components/tamangnetra/FileTranslator';
-import { YouTubeTranslator } from '@/src/components/tamangnetra/YouTubeTranslator';
-import { ImageTranslator } from '@/src/components/tamangnetra/ImageTranslator';
-import { InteractiveOutput } from '@/src/components/tamangnetra/InteractiveOutput';
-import { KnowledgeGraphPanel } from '@/src/components/tamangnetra/KnowledgeGraphPanel';
-import { GlossaryManager } from '@/src/components/tamangnetra/GlossaryManager';
-import { BoundingBoxAdjuster } from '@/src/components/tamangnetra/BoundingBoxAdjuster';
-import { AboutSection } from '@/src/components/tamangnetra/AboutSection';
-import { TestimonialsSection } from '@/src/components/tamangnetra/TestimonialsSection';
-import { HowItWorks } from '@/src/components/tamangnetra/HowItWorks';
-import { ShortcutPicker } from '@/src/components/tamangnetra/ShortcutPicker';
-import { TranslationComparisonTable } from '@/src/components/tamangnetra/TranslationComparisonTable';
-import { useTranslationStore } from '@/src/components/tamangnetra/TranslationStore';
-import { TranslationDiffView } from '@/src/components/tamangnetra/TranslationDiffView';
-import { TranslationComparison } from '@/src/components/tamangnetra/TranslationComparison';
-import { TranslationProgressDashboard } from '@/src/components/tamangnetra/TranslationProgressDashboard';
-import { TranslationQualityScore } from '@/src/components/tamangnetra/TranslationQualityScore';
-import { BatchTranslator } from '@/src/components/tamangnetra/BatchTranslator';
-import { TranslationMemory } from '@/src/components/tamangnetra/TranslationMemory';
-import { OnboardingTour } from '@/src/components/tamangnetra/OnboardingTour';
-import { AccessibilityPanel } from '@/src/components/tamangnetra/AccessibilityPanel';
-import { ExportSettingsDialog } from '@/src/components/tamangnetra/ExportSettingsDialog';
-import { TranslationAnalytics } from '@/src/components/tamangnetra/TranslationAnalytics';
-import { FAQSection } from '@/src/components/tamangnetra/FAQSection';
-import { TypographyShowcase } from '@/src/components/tamangnetra/TypographyShowcase';
-import { TimelineSection } from '@/src/components/tamangnetra/TimelineSection';
-import { CommunitySection } from '@/src/components/tamangnetra/CommunitySection';
-import { TranslationAssistant } from '@/src/components/tamangnetra/TranslationAssistant';
-import { MobileBottomNav } from '@/src/components/tamangnetra/MobileBottomNav';
-import { LanguageMapSection } from '@/src/components/tamangnetra/LanguageMapSection';
-import { DocumentPreview } from '@/src/components/tamangnetra/DocumentPreview';
-import { WordAlignmentView } from '@/src/components/tamangnetra/WordAlignmentView';
-import { ConfidenceHeatmap } from '@/src/components/tamangnetra/ConfidenceHeatmap';
-import { TranslationBenchmark } from '@/src/components/tamangnetra/TranslationBenchmark';
-import { ShortcutsFloatingButton } from '@/src/components/tamangnetra/ShortcutsHelpPanel';
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/src/components/ui/card";
+import { Input } from "@/src/components/ui/input";
 import {
-  TranslationSettingsSkeleton,
-  ProgressDashboardSkeleton,
-  InteractiveOutputSkeleton,
-} from '@/src/components/tamangnetra/SkeletonLoaders';
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/src/components/ui/tabs";
+import { Textarea } from "@/src/components/ui/textarea";
+import { Skeleton } from "@/src/components/ui/skeleton";
+import { apiClient, type HealthResponse } from "@/src/lib/api-client";
+import { translateWithPII } from "@/src/hooks/use-pii-translation";
+import { TypewriterEffect } from "@/src/components/tamangnetra/TypewriterEffect";
 
-// Dynamic import for Book3DView (Three.js is heavy)
-const Book3DView = dynamic(
-  () =>
-    import('@/src/components/tamangnetra/Book3DView').then(
-      (mod) => mod.Book3DView
-    ),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-[400px] items-center justify-center rounded-lg border bg-muted/10">
-        <div className="flex flex-col items-center gap-2">
-          <Eye className="size-8 text-amber-500 animate-pulse" />
-          <p className="text-sm text-muted-foreground">Loading 3D view...</p>
-        </div>
-      </div>
-    ),
-  }
-);
+const LANGUAGE_OPTIONS = ["English", "Nepali", "Tamang"] as const;
 
-const featureList = [
-  { icon: Shield, label: 'PII Shield' },
-  { icon: Lock, label: 'AES-256' },
-  { icon: Share2, label: 'Knowledge Graph' },
-  { icon: Type, label: 'Font Adjust' },
-  { icon: ScanLine, label: 'OCR' },
-  { icon: BookOpen, label: '3D Book' },
-  { icon: Video, label: 'YouTube SRT' },
-  { icon: PenTool, label: 'Pen Tool' },
-  { icon: FileText, label: 'PDF/DOCX' },
-  { icon: Volume2, label: 'Audio TTS' },
-  { icon: Code, label: 'CSV Aware' },
-];
+type Language = (typeof LANGUAGE_OPTIONS)[number];
+type DocumentFileType = "pdf" | "docx" | "csv" | "tsv";
 
-const techBadges = [
-  'Next.js 16',
-  'TypeScript',
-  'Tailwind CSS',
-  'shadcn/ui',
-  'Three.js',
-  'Tesseract.js',
-  'Zustand',
-  'Framer Motion',
-];
+type ProcessFileSegment = {
+  original: string;
+  translated: string;
+};
 
-function Footer() {
-  const [email, setEmail] = useState('');
-  const [subscribed, setSubscribed] = useState(false);
-  const [emailInvalid, setEmailInvalid] = useState(false);
-
-  const validateEmail = (value: string) => {
-    if (!value.trim()) {
-      setEmailInvalid(false);
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    setEmailInvalid(!emailRegex.test(value));
+type ProcessFileResult = {
+  original: string;
+  translated: string;
+  segments: ProcessFileSegment[];
+  fileInfo: {
+    name: string;
+    type: DocumentFileType;
+    size: number;
   };
+};
 
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setEmail(value);
-    if (emailInvalid) validateEmail(value);
-  };
+type SubtitleRow = {
+  index: number;
+  startTime: string;
+  endTime: string;
+  text: string;
+};
 
-  const handleEmailBlur = () => {
-    validateEmail(email);
-  };
+type TranslatedSubtitleRow = SubtitleRow & {
+  translated: string;
+};
 
-  const handleSubscribe = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (emailInvalid) return;
-    if (email.trim()) {
-      setSubscribed(true);
-      setEmail('');
-      setEmailInvalid(false);
-      setTimeout(() => setSubscribed(false), 4000);
-    }
-  };
+function StatusPill({
+  status,
+  label,
+}: {
+  status: "idle" | "loading" | "success" | "error";
+  label: string;
+}) {
+  const styles = {
+    idle: "bg-muted text-muted-foreground",
+    loading: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+    success: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+    error: "bg-red-500/15 text-red-700 dark:text-red-300",
+  } as const;
 
-  return (
-    <footer className="mt-auto relative bg-muted/20">
-      {/* Gradient top border */}
-      <div className="h-[2px] bg-gradient-to-r from-emerald-500 via-teal-500 to-amber-500" />
-
-      {/* Diagonal line background pattern */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.02] dark:opacity-[0.03]"
-        style={{
-          backgroundImage: `repeating-linear-gradient(
-            45deg,
-            transparent,
-            transparent 10px,
-            currentColor 10px,
-            currentColor 11px
-          )`,
-        }}
-      />
-
-      {/* Newsletter/Subscribe Section */}
-      <div className="relative border-b border-border/30">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-center sm:text-left">
-              <h4 className="text-sm font-semibold text-foreground">Stay Updated</h4>
-              <p className="text-xs text-muted-foreground mt-0.5">Get notified about new features and language additions</p>
-            </div>
-            <form onSubmit={handleSubscribe} className="flex items-center gap-2 w-full sm:w-auto">
-              <input
-                type="email"
-                value={email}
-                onChange={handleEmailChange}
-                onBlur={handleEmailBlur}
-                placeholder="your@email.com"
-                className={`h-9 px-3 rounded-lg border bg-background/80 backdrop-blur-sm text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 transition-all w-full sm:w-56 ${
-                  emailInvalid
-                    ? 'border-red-400 dark:border-red-500 focus:border-red-500 focus:ring-red-500/20'
-                    : 'border-border/50 focus:border-emerald-500/50 focus:ring-emerald-500/20'
-                }`}
-                required
-              />
-              <Button
-                type="submit"
-                size="sm"
-                className="h-9 bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-500 hover:to-teal-500 shrink-0 transition-all duration-300 relative overflow-hidden group"
-              >
-                {/* Animated gradient overlay on hover */}
-                <span className="absolute inset-0 bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                {subscribed ? (
-                  <motion.span
-                    className="relative flex items-center gap-1"
-                    initial={{ scale: 0.8, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 15 }}
-                  >
-                    <motion.svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      initial={{ pathLength: 0 }}
-                      animate={{ pathLength: 1 }}
-                      transition={{ duration: 0.4, ease: 'easeOut' }}
-                    >
-                      <motion.path d="M5 13l4 4L19 7" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.4, ease: 'easeOut' }} />
-                    </motion.svg>
-                    Subscribed!
-                  </motion.span>
-                ) : (
-                  <span className="relative">Stay Updated</span>
-                )}
-              </Button>
-            </form>
-          </div>
-        </div>
-      </div>
-
-      <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {/* Brand */}
-          <div className="space-y-3 sm:col-span-2 lg:col-span-1">
-            <div className="flex items-center gap-2">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600">
-                <Eye className="size-4 text-white" />
-              </div>
-              <div>
-                <span className="font-bold gradient-text">TamangNetra</span>
-                <span className="ml-1.5 text-xs text-muted-foreground">तामाङनेत्र</span>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed max-w-xs">
-              See Across Languages. Translate with Precision. A trilingual
-              translation tool preserving Nepal&apos;s linguistic heritage.
-            </p>
-            {/* Social media icons with hover effects */}
-            <div className="flex items-center gap-2">
-              <a
-                href="https://github.com/tamangnetra/tamangnetra"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group flex size-8 items-center justify-center rounded-lg border border-border/50 bg-background/60 backdrop-blur-sm text-muted-foreground hover:text-white hover:border-emerald-500/60 hover:bg-emerald-600 hover:shadow-md hover:shadow-emerald-500/20 transition-all duration-300 hover:scale-110"
-                aria-label="GitHub"
-              >
-                <svg className="size-4 transition-transform duration-300 group-hover:rotate-12" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    fillRule="evenodd"
-                    d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </a>
-              <a
-                href="https://twitter.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group flex size-8 items-center justify-center rounded-lg border border-border/50 bg-background/60 backdrop-blur-sm text-muted-foreground hover:text-white hover:border-teal-500/60 hover:bg-teal-600 hover:shadow-md hover:shadow-teal-500/20 transition-all duration-300 hover:scale-110"
-                aria-label="Twitter / X"
-              >
-                <svg className="size-3.5 transition-transform duration-300 group-hover:rotate-12" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                </svg>
-              </a>
-              <a
-                href="https://discord.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group flex size-8 items-center justify-center rounded-lg border border-border/50 bg-background/60 backdrop-blur-sm text-muted-foreground hover:text-white hover:border-amber-500/60 hover:bg-amber-600 hover:shadow-md hover:shadow-amber-500/20 transition-all duration-300 hover:scale-110"
-                aria-label="Discord"
-              >
-                <svg className="size-4 transition-transform duration-300 group-hover:rotate-12" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z" />
-                </svg>
-              </a>
-            </div>
-          </div>
-
-          {/* Features */}
-          <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-foreground hover-underline inline-block cursor-default">Features</h4>
-            <div className="flex flex-wrap gap-1.5">
-              {featureList.map((feat) => (
-                <Badge
-                  key={feat.label}
-                  variant="outline"
-                  className="text-[10px] px-2 py-0.5 border-border/50 bg-background/60"
-                >
-                  <feat.icon className="size-2.5 mr-1 text-emerald-500" />
-                  {feat.label}
-                </Badge>
-              ))}
-            </div>
-          </div>
-
-          {/* Tech Stack */}
-          <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-foreground hover-underline inline-block cursor-default">Tech Stack</h4>
-            <div className="flex flex-wrap gap-1.5">
-              {techBadges.map((tech) => (
-                <Badge
-                  key={tech}
-                  variant="outline"
-                  className="text-[10px] px-2 py-0.5 border-border/50 bg-background/60"
-                >
-                  {tech}
-                </Badge>
-              ))}
-            </div>
-          </div>
-
-          {/* Languages & Hackathon */}
-          <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-foreground hover-underline inline-block cursor-default">Languages</h4>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs">
-                <Globe className="size-3 text-emerald-500" />
-                <span className="text-foreground">English</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <Globe className="size-3 text-amber-500" />
-                <span className="text-foreground">नेपाली (Nepali)</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <Globe className="size-3 text-teal-500" />
-                <span className="text-foreground">तामाङ (Tamang)</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="section-divider my-8" />
-
-        {/* Bottom bar */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 flex-wrap justify-center">
-            <Badge className="glow-badge bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-0 text-[10px] px-3 py-0.5 font-semibold">
-              🏔️ Built for TMT Hackathon 2025
-            </Badge>
-            <Badge
-              variant="outline"
-              className="text-[10px] px-2 py-0.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
-            >
-              🇳🇵 Nepal
-            </Badge>
-          </div>
-          <div className="flex items-center gap-4">
-            {/* Back to top link */}
-            <button
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="text-xs text-foreground/70 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors flex items-center gap-1"
-            >
-              <ArrowUp className="size-3" />
-              Back to top
-            </button>
-            <p className="text-xs text-foreground/70 text-center flex items-center gap-1">
-              Made with <Heart className="size-3 text-red-400 animate-heart-pulse" /> in Nepal —{' '}
-              <Mountain className="size-3 text-emerald-500" />
-              TamangNetra 2025
-            </p>
-          </div>
-        </div>
-      </div>
-    </footer>
-  );
+  return <Badge className={styles[status]}>{label}</Badge>;
 }
 
-function HistoryBridge() {
-  // Bridge component that binds the history saver once on mount
-  const { saveTranslation } = useTranslationHistory();
-  const boundRef = useRef(false);
-
-  useEffect(() => {
-    if (!boundRef.current) {
-      bindHistorySaver(saveTranslation);
-      boundRef.current = true;
-    }
-  }, [saveTranslation]);
-
+function getDocumentType(fileName: string): DocumentFileType | null {
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  if (
+    extension === "pdf" ||
+    extension === "docx" ||
+    extension === "csv" ||
+    extension === "tsv"
+  ) {
+    return extension;
+  }
   return null;
 }
 
-// ── Scroll Progress Indicator ──
-function ScrollProgressBar() {
-  const { scrollYProgress } = useScroll();
-  const scaleX = useTransform(scrollYProgress, [0, 1], [0, 1]);
-
-  return (
-    <motion.div
-      className="fixed top-0 left-0 right-0 h-[3px] z-[60] origin-left"
-      style={{
-        scaleX,
-        background: 'linear-gradient(90deg, #10b981, #14b8a6)',
-      }}
-    />
-  );
-}
-
-// ── Back to Top Button (desktop only, lg+) ──
-function BackToTopButton() {
-  const [show, setShow] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setShow(window.scrollY > 500);
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Could not read file"));
+        return;
+      }
+      resolve(result.split(",")[1] ?? "");
     };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  const scrollToTop = useCallback(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
-
-  return (
-    <AnimatePresence>
-      {show && (
-        <motion.button
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.8 }}
-          transition={{ duration: 0.2 }}
-          onClick={scrollToTop}
-          className="hidden lg:flex fixed bottom-4 left-4 z-40 size-10 items-center justify-center rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg hover:from-emerald-400 hover:to-teal-400 transition-all duration-300 hover:shadow-xl"
-          aria-label="Back to top"
-        >
-          <ArrowUp className="size-4" />
-        </motion.button>
-      )}
-    </AnimatePresence>
-  );
-}
-
-// ── Wave Section Divider with Parallax ──
-function WaveDivider({ flip = false }: { flip?: boolean }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ['start end', 'end start'],
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.readAsDataURL(file);
   });
-  const y = useTransform(scrollYProgress, [0, 1], [20, -20]);
-
-  return (
-    <div ref={ref} className={`relative w-full overflow-hidden h-12 -my-1 ${flip ? 'rotate-180' : ''}`}>
-      <motion.div style={{ y }} className="absolute inset-0">
-      <svg
-        viewBox="0 0 1440 48"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="absolute inset-0 w-full h-full"
-        preserveAspectRatio="none"
-      >
-        <path
-          d="M0 24C240 48 480 0 720 24C960 48 1200 0 1440 24V48H0V24Z"
-          fill="url(#wave-gradient)"
-          fillOpacity="0.08"
-        />
-        <path
-          d="M0 32C240 8 480 48 720 32C960 8 1200 48 1440 32V48H0V32Z"
-          fill="url(#wave-gradient)"
-          fillOpacity="0.05"
-        />
-        <defs>
-          <linearGradient id="wave-gradient" x1="0" y1="0" x2="1440" y2="0" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#10b981" />
-            <stop offset="0.5" stopColor="#14b8a6" />
-            <stop offset="1" stopColor="#f59e0b" />
-          </linearGradient>
-        </defs>
-      </svg>
-      </motion.div>
-    </div>
-  );
 }
 
-// ── Mobile Settings Sheet ──
-function MobileSettingsSheet() {
-  const [open, setOpen] = useState(false);
-  const [show, setShow] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setShow(window.scrollY > 300);
-    };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  return (
-    <div className="lg:hidden fixed bottom-4 left-4 z-40">
-      <AnimatePresence>
-        {show && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.2 }}
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="absolute bottom-14 left-0 flex size-9 items-center justify-center rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg hover:from-emerald-400 hover:to-teal-400 transition-all duration-300"
-            aria-label="Back to top"
-          >
-            <ArrowUp className="size-3.5" />
-          </motion.button>
-        )}
-      </AnimatePresence>
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger asChild>
-          <Button
-            size="icon"
-            className="rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg hover:from-emerald-400 hover:to-teal-400 size-10"
-          >
-            <Settings className="size-4" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-80 overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Settings className="size-4 text-emerald-600" />
-              Settings
-            </SheetTitle>
-          </SheetHeader>
-          <div className="space-y-4 mt-4 px-1">
-            <TranslationSettings />
-            <TranslationProgressDashboard />
-            <AccessibilityPanel />
-          </div>
-        </SheetContent>
-      </Sheet>
-    </div>
-  );
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function Home() {
-  const [outputTab, setOutputTab] = useState('interactive');
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [exportSettingsOpen, setExportSettingsOpen] = useState(false);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const { originalText, translatedText, isTranslating } = useTranslationStore();
-  const hasResults = originalText.length > 0 || translatedText.length > 0;
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [healthStatus, setHealthStatus] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
 
-  // Simulate initial settings load
+  const [isDragging, setIsDragging] = useState(false);
+
+  const [sourceLanguage, setSourceLanguage] = useState<Language>("English");
+  const [targetLanguage, setTargetLanguage] = useState<Language>("Nepali");
+
+  const [text, setText] = useState("Hello, how are you?");
+  const [translatedText, setTranslatedText] = useState("");
+  const [translateStatus, setTranslateStatus] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [piiCount, setPiiCount] = useState(0);
+  const [piiTypes, setPiiTypes] = useState<string[]>([]);
+
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [documentFileType, setDocumentFileType] =
+    useState<DocumentFileType | null>(null);
+  const [documentFileBase64, setDocumentFileBase64] = useState("");
+  const [documentResult, setDocumentResult] =
+    useState<ProcessFileResult | null>(null);
+  const [documentStatus, setDocumentStatus] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [documentElapsedSeconds, setDocumentElapsedSeconds] = useState(0);
+  const [documentProgress, setDocumentProgress] = useState(0);
+  const [documentProgressMessage, setDocumentProgressMessage] = useState("Uploading document...");
+
   useEffect(() => {
-    const timer = setTimeout(() => setSettingsLoaded(true), 600);
-    return () => clearTimeout(timer);
+    if (documentStatus !== "loading") {
+      setDocumentElapsedSeconds(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setDocumentElapsedSeconds((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [documentStatus]);
+
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeTitle, setYoutubeTitle] = useState("");
+  const [youtubeVideoId, setYoutubeVideoId] = useState("");
+  const [youtubeIsDemo, setYoutubeIsDemo] = useState(false);
+  const [youtubeSubtitles, setYoutubeSubtitles] = useState<SubtitleRow[]>([]);
+  const [translatedYoutubeSubtitles, setTranslatedYoutubeSubtitles] = useState<
+    TranslatedSubtitleRow[]
+  >([]);
+  const [youtubeStatus, setYoutubeStatus] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [youtubeTranslateStatus, setYoutubeTranslateStatus] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+
+  useEffect(() => {
+    let active = true;
+
+    const checkBackend = async () => {
+      setHealthStatus("loading");
+      try {
+        const result = await apiClient.healthCheck();
+        if (!active) return;
+        setHealth(result);
+        setHealthStatus("success");
+      } catch {
+        if (!active) return;
+        setHealthStatus("error");
+      }
+    };
+
+    checkBackend();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
+  const translatePlainText = async () => {
+    setTranslateStatus("loading");
+    try {
+      const analysis = translateWithPII(text, true);
+      const translatedSegments: string[] = [];
+
+      for (const fragment of analysis.translatableText) {
+        const response = await apiClient.translate({
+          text: fragment,
+          source_language: sourceLanguage,
+          target_language: targetLanguage,
+          include_confidence: false,
+        });
+        translatedSegments.push(response.translated_text);
+      }
+
+      setTranslatedText(analysis.reconstruct(translatedSegments));
+      setPiiCount(analysis.piiCount);
+      setPiiTypes(analysis.piiTypes);
+      setTranslateStatus("success");
+    } catch {
+      setTranslateStatus("error");
+    }
+  };
+
+  const processSelectedFile = async (file: File | null) => {
+    setDocumentResult(null);
+    setDocumentStatus("idle");
+    setDocumentFile(file);
+    setDocumentFileType(file ? getDocumentType(file.name) : null);
+    setDocumentFileBase64("");
+
+    if (!file) return;
+
+    const type = getDocumentType(file.name);
+    if (!type) {
+      setDocumentFile(null);
+      return;
+    }
+
+    const base64 = await readFileAsBase64(file);
+    setDocumentFileBase64(base64);
+  };
+
+  const handleDocumentFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0] ?? null;
+    await processSelectedFile(file);
+  };
+
+  const translateDocument = async () => {
+    if (!documentFile || !documentFileType) {
+      return;
+    }
+
+    setDocumentStatus("loading");
+    setDocumentProgress(0);
+    setDocumentProgressMessage("Uploading document...");
+    
+    try {
+      const formData = new FormData();
+      formData.append("file", documentFile);
+      formData.append("src_lang", sourceLanguage);
+      formData.append("tgt_lang", targetLanguage);
+      formData.append("pii_enabled", "true");
+      formData.append("knowledge_graph_enabled", "true");
+
+      const response = await fetch("/api/process-file", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Document translation failed");
+      }
+
+      if (!response.body) {
+        throw new Error("No response body");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let partial = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        partial += decoder.decode(value, { stream: true });
+        const lines = partial.split("\n");
+        partial = lines.pop() || "";
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
+          try {
+            const data = JSON.parse(line);
+            
+            if (data.type === "status") {
+              setDocumentProgressMessage(data.message);
+            } else if (data.type === "progress") {
+              const progress = Math.round((data.current / data.total) * 100);
+              setDocumentProgress(progress);
+              setDocumentProgressMessage(`Translating sentences (${data.current}/${data.total})...`);
+            } else if (data.type === "result") {
+              const resultData = data.data;
+              
+              // Build knowledge entries
+              const termMap = new Map<string, { translation: string; frequency: number }>();
+              for (const seg of (resultData.segments || [])) {
+                const key = seg.original.trim().toLowerCase();
+                if (!key) continue;
+                const existing = termMap.get(key);
+                if (existing) {
+                  existing.frequency += 1;
+                } else {
+                  termMap.set(key, { translation: seg.translated, frequency: 1 });
+                }
+              }
+              const knowledgeEntries = Array.from(termMap.entries())
+                .map(([source, info]) => ({
+                  source,
+                  translation: info.translation,
+                  frequency: info.frequency,
+                }))
+                .filter(entry => entry.frequency > 1)
+                .sort((a, b) => b.frequency - a.frequency);
+              
+              setDocumentResult({
+                original: resultData.original || "",
+                translated: resultData.translated || "",
+                segments: resultData.segments || [],
+                knowledgeEntries,
+                fileInfo: resultData.fileInfo || {
+                  name: documentFile.name,
+                  type: documentFileType,
+                  size: documentFile.size,
+                }
+              });
+              setDocumentStatus("success");
+            } else if (data.type === "error") {
+              throw new Error(data.message);
+            }
+          } catch (e) {
+            console.error("Failed to parse stream chunk or stream error", e);
+            if (e instanceof Error) {
+              setDocumentProgressMessage(e.message);
+            }
+            throw e; // Rethrow to be caught by the outer catch
+          }
+        }
+      }
+      
+      // If we exit the loop without success or error, it might have ended abruptly
+      if (documentStatus === "loading") {
+        // Just in case it never received "result"
+      }
+    } catch (error) {
+      console.error("Translation failed:", error);
+      setDocumentStatus("error");
+    }
+  };
+
+  const downloadTranslatedDocument = async () => {
+    if (!documentFile || !documentFileType || !documentResult) {
+      return;
+    }
+
+    // For simple text or images, we just download the translated text as a .txt file
+    if (["txt", "image", "jpg", "jpeg", "png"].includes(documentFileType)) {
+      const blob = new Blob([documentResult.translated], { type: "text/plain;charset=utf-8" });
+      const baseName = documentFile.name.replace(/\.[^.]+$/, "");
+      downloadBlob(blob, `translated_${baseName}.txt`);
+      return;
+    }
+
+    // For Track 2 formatted documents (PDF, DOCX, CSV, Excel), use the backend reconstruct endpoint
+    // which modifies the original document in-place to perfectly preserve layout and formatting.
+    const formData = new FormData();
+    formData.append("file", documentFile);
+    formData.append("src_lang", sourceLanguage);
+    formData.append("tgt_lang", targetLanguage);
+
+    const response = await fetch("http://localhost:8000/document/reconstruct", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("Document reconstruction failed:", err);
+      // Fallback: If reconstruct fails, just download the raw text
+      const blob = new Blob([documentResult.translated], { type: "text/plain;charset=utf-8" });
+      const baseName = documentFile.name.replace(/\.[^.]+$/, "");
+      downloadBlob(blob, `translated_${baseName}.txt`);
+      return;
+    }
+
+    const blob = await response.blob();
+    const baseName = documentFile.name.replace(/\.[^.]+$/, "");
+    downloadBlob(blob, `translated_${baseName}.${documentFileType}`);
+  };
+
+  const fetchYoutubeSubtitles = async () => {
+    if (!youtubeUrl.trim()) {
+      return;
+    }
+
+    setYoutubeStatus("loading");
+    setYoutubeTranslateStatus("idle");
+    setTranslatedYoutubeSubtitles([]);
+
+    try {
+      const response = await fetch("/api/youtube", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          url: youtubeUrl.trim(),
+          src_lang: sourceLanguage,
+        }),
+      });
+      const payload = (await response.json()) as {
+        subtitles?: SubtitleRow[];
+        title?: string;
+        videoId?: string;
+        isDemo?: boolean;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "YouTube fetch failed");
+      }
+
+      setYoutubeTitle(payload.title || "");
+      setYoutubeVideoId(payload.videoId || "");
+      setYoutubeIsDemo(Boolean(payload.isDemo));
+      setYoutubeSubtitles(payload.subtitles || []);
+      setYoutubeStatus("success");
+    } catch {
+      setYoutubeStatus("error");
+    }
+  };
+
+  const translateYoutubeSubtitles = async () => {
+    if (!youtubeSubtitles.length) {
+      return;
+    }
+
+    setYoutubeTranslateStatus("loading");
+    try {
+      const translated = [] as TranslatedSubtitleRow[];
+      for (const row of youtubeSubtitles) {
+        const response = await apiClient.translate({
+          text: row.text,
+          source_language: sourceLanguage,
+          target_language: targetLanguage,
+          include_confidence: false,
+        });
+        translated.push({
+          ...row,
+          translated: response.translated_text,
+        });
+      }
+      setTranslatedYoutubeSubtitles(translated);
+      setYoutubeTranslateStatus("success");
+    } catch {
+      setYoutubeTranslateStatus("error");
+    }
+  };
+
+  const downloadYoutubeSrt = async () => {
+    if (!translatedYoutubeSubtitles.length) {
+      return;
+    }
+
+    const response = await fetch("/api/download", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        translatedSegments: translatedYoutubeSubtitles.map((row) => ({
+          original: `${row.index}\n${row.startTime} --> ${row.endTime}\n${row.text}`,
+          translated: row.translated,
+        })),
+        fileType: "srt",
+        fileName: youtubeVideoId
+          ? `${youtubeVideoId}.srt`
+          : "youtube_subtitles.srt",
+        srcLang: sourceLanguage,
+        tgtLang: targetLanguage,
+      }),
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const blob = await response.blob();
+    downloadBlob(
+      blob,
+      youtubeVideoId ? `${youtubeVideoId}.srt` : "youtube_subtitles.srt",
+    );
+  };
+
   return (
-    <div className="min-h-screen flex flex-col bg-background overflow-x-hidden">
-      {/* History Bridge — binds saveTranslation to store */}
-      <HistoryBridge />
+    <div className="relative min-h-screen bg-background text-foreground overflow-hidden">
+      {/* Animated Mesh Background */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <motion.div
+          animate={{
+            scale: [1, 1.2, 1],
+            opacity: [0.3, 0.2, 0.3],
+          }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] rounded-full bg-emerald-500/20 blur-[120px]"
+        />
+        <motion.div
+          animate={{
+            scale: [1, 1.5, 1],
+            opacity: [0.2, 0.1, 0.2],
+          }}
+          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+          className="absolute top-[20%] -right-[10%] w-[50%] h-[50%] rounded-full bg-teal-500/20 blur-[120px]"
+        />
+        <motion.div
+          animate={{
+            scale: [1, 1.1, 1],
+            opacity: [0.1, 0.2, 0.1],
+          }}
+          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+          className="absolute -bottom-[10%] left-[20%] w-[60%] h-[40%] rounded-full bg-emerald-700/20 blur-[100px]"
+        />
+      </div>
 
-      {/* Scroll Progress Bar */}
-      <ScrollProgressBar />
-
-      {/* Navbar with History button */}
-      <div className="sticky top-0 z-50">
+      <div className="relative z-10">
         <Navbar />
-      </div>
 
-      {/* Floating History Button */}
-      <div className="fixed bottom-4 right-4 z-40">
-        <HistoryButton onClick={() => setHistoryOpen(true)} />
-      </div>
+        <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="space-y-4"
+        >
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-2">
+              <Badge variant="secondary" className="w-fit gap-1.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors">
+                <ArrowRightLeft className="size-3.5" /> Core translation engine
+              </Badge>
+              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-500">
+                TamangNetra Studio
+              </h1>
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+                Professional translation across English, Nepali, and Tamang. Features robust API rate-limiting, sentence-level PII preservation, and multi-format document reconstruction.
+              </p>
+            </div>
 
-      {/* Back to Top Button (desktop only - mobile uses settings sheet) */}
-      <BackToTopButton />
+            <Card className="w-full max-w-sm border-dashed bg-gradient-to-br from-background to-muted/30 shadow-sm hover:shadow-md transition-shadow">
+              <CardContent className="flex items-center gap-3 p-4">
+                <motion.div 
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  className="rounded-full bg-emerald-100 dark:bg-emerald-900/30 p-2 text-emerald-600 dark:text-emerald-400"
+                >
+                  {healthStatus === "loading" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="size-4" />
+                  )}
+                </motion.div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    {healthStatus === "success"
+                      ? "Neural API Connected"
+                      : healthStatus === "error"
+                        ? "API Offline"
+                        : "Initializing Engine..."}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {health
+                      ? `Latency: ${health.status === 'ok' ? '< 50ms' : 'Unknown'} • Ready`
+                      : "Awaiting heartbeat..."}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <Button variant="outline" size="sm" asChild className="w-fit hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/30 transition-colors">
+            <a
+              href="http://localhost:8000/docs"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Developer API <ExternalLink className="ml-1.5 size-3.5" />
+            </a>
+          </Button>
+        </motion.section>
 
-      {/* Mobile Settings Sheet (shown on < lg screens) */}
-      <MobileSettingsSheet />
-
-      {/* Translation History Sheet */}
-      <TranslationHistory open={historyOpen} onOpenChange={setHistoryOpen} />
-
-      {/* Keyboard Shortcut Picker (Ctrl+K) */}
-      <ShortcutPicker />
-
-      {/* AI Translation Assistant Chatbot */}
-      <TranslationAssistant />
-
-      {/* Mobile Bottom Navigation (visible on < lg screens) */}
-      <MobileBottomNav />
-
-      {/* Shortcuts Floating Help Button (bottom-center, above mobile nav) */}
-      <ShortcutsFloatingButton />
-
-      {/* Onboarding Tour */}
-      <OnboardingTour />
-
-      {/* Export Settings Dialog */}
-      <ExportSettingsDialog open={exportSettingsOpen} onOpenChange={setExportSettingsOpen} />
-
-      {/* Hero Section - stagger 0 */}
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-      >
-        <Hero />
-      </motion.div>
-
-      {/* Wave divider after Hero */}
-      <WaveDivider />
-
-      {/* Stats Section - stagger 1 */}
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-100px' }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-      >
-        <StatsSection />
-      </motion.div>
-
-      {/* How it Works Section - stagger 2 */}
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-80px' }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-      >
-        <HowItWorks />
-      </motion.div>
-
-      {/* Wave divider after HowItWorks */}
-      <WaveDivider flip />
-
-      {/* Main Tool Section - stagger 3, fade-in-up on mount */}
-      <main id="tool-section" className="flex-1 relative">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-50px' }}
-          transition={{ duration: 0.5 }}
-          className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-6"
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
         >
-          {/* Feature Badges */}
-          <motion.div
-            id="features"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            <FeatureBadges />
-          </motion.div>
+          <Tabs defaultValue="translate" className="space-y-4">
+          <TabsList className="grid h-auto w-full grid-cols-3 gap-2">
+            <TabsTrigger value="translate">Translate</TabsTrigger>
+            <TabsTrigger value="documents">Documents</TabsTrigger>
+            <TabsTrigger value="youtube">YouTube</TabsTrigger>
+          </TabsList>
 
-          {/* Main Grid: Settings + Translation Tabs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {/* Sidebar - Translation Settings (hidden on mobile, shown on lg+) */}
-            <aside id="translation-settings" className="hidden lg:block lg:col-span-1 space-y-4">
-              {settingsLoaded ? (
-                <>
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="card-hover"
-                  >
-                    <TranslationSettings />
-                  </motion.div>
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.4 }}
-                    className="card-hover"
-                  >
-                    <TranslationProgressDashboard />
-                  </motion.div>
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.5 }}
-                    className="card-hover"
-                  >
-                    <AccessibilityPanel />
-                  </motion.div>
-                </>
-              ) : (
-                <>
-                  <TranslationSettingsSkeleton />
-                  <ProgressDashboardSkeleton />
-                </>
-              )}
-            </aside>
-
-            {/* Main Content - Translation Tabs */}
-            <div className="md:col-span-2 lg:col-span-3">
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                <Tabs defaultValue="file" className="space-y-4">
-                  <TabsList className="w-full sm:w-auto">
-                    <TabsTrigger value="file" className="flex-1 sm:flex-none">
-                      📄 File Translation
-                    </TabsTrigger>
-                    <TabsTrigger value="batch" className="flex-1 sm:flex-none">
-                      📊 Batch
-                    </TabsTrigger>
-                    <TabsTrigger value="youtube" className="flex-1 sm:flex-none">
-                      🎬 YouTube
-                    </TabsTrigger>
-                    <TabsTrigger value="image" className="flex-1 sm:flex-none">
-                      🖼️ Image OCR
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="file">
-                    <div id="file-translator">
-                      <FileTranslator />
+          <TabsContent value="translate" id="translate">
+            <Card className="backdrop-blur-xl bg-background/60 border-white/10 shadow-xl overflow-hidden">
+              <CardHeader className="border-b border-border/50 bg-muted/20">
+                <CardTitle>Text translation</CardTitle>
+                <CardDescription>
+                  PII, email addresses, and phone numbers stay in place.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border/50">
+                  {/* Left Column: Input */}
+                  <div className="p-6 space-y-4 bg-muted/5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium">Source</label>
+                      <select
+                        className="h-8 w-32 rounded-md border bg-background/50 backdrop-blur-sm px-2 text-xs"
+                        value={sourceLanguage}
+                        onChange={(event) =>
+                          setSourceLanguage(event.target.value as Language)
+                        }
+                      >
+                        {LANGUAGE_OPTIONS.map((language) => (
+                          <option key={language} value={language}>
+                            {language}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  </TabsContent>
 
-                  <TabsContent value="batch">
-                    <BatchTranslator />
-                  </TabsContent>
+                    <Textarea
+                      value={text}
+                      onChange={(event) => setText(event.target.value)}
+                      rows={10}
+                      className="resize-none bg-background/50 backdrop-blur-sm border-white/5 focus-visible:ring-emerald-500/50 text-base"
+                      placeholder="Enter text to translate..."
+                    />
 
-                  <TabsContent value="youtube">
-                    <YouTubeTranslator />
-                  </TabsContent>
-
-                  <TabsContent value="image">
-                    <ImageTranslator />
-                  </TabsContent>
-                </Tabs>
-              </motion.div>
-            </div>
-          </div>
-
-          {/* Output Section */}
-          <AnimatePresence>
-            {hasResults && (
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.5 }}
-                className="space-y-6"
-              >
-                <Separator className="my-8" />
-
-                <div id="output-section" className="flex items-center gap-2">
-                  <Eye className="size-5 text-emerald-600" />
-                  <h2 className="text-xl font-semibold">Translation Results</h2>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs gap-1 ml-auto hover:border-teal-300 hover:text-teal-600 dark:hover:border-teal-700 dark:hover:text-teal-400"
-                    onClick={() => setExportSettingsOpen(true)}
-                  >
-                    <Settings className="size-3" />
-                    Export Settings
-                  </Button>
-                </div>
-
-                <Tabs
-                  value={outputTab}
-                  onValueChange={setOutputTab}
-                  className="space-y-4"
-                >
-                  <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-                    <TabsList className="flex-nowrap min-w-max">
-                      <TabsTrigger value="interactive">
-                        📝 Interactive View
-                      </TabsTrigger>
-                      <TabsTrigger value="diff">
-                        🔍 Diff View
-                      </TabsTrigger>
-                      <TabsTrigger value="compare">
-                        🔄 Compare
-                      </TabsTrigger>
-                      <TabsTrigger value="3dbook">
-                        📖 3D Book View
-                      </TabsTrigger>
-                      <TabsTrigger value="font">
-                        🔤 Font Adjust
-                      </TabsTrigger>
-                      <TabsTrigger value="graph">
-                        🔗 Knowledge Graph
-                      </TabsTrigger>
-                      <TabsTrigger value="glossary">
-                        📚 Glossary
-                      </TabsTrigger>
-                      <TabsTrigger value="tm">
-                        💾 Translation Memory
-                      </TabsTrigger>
-                      <TabsTrigger value="quality">
-                        📊 Quality
-                      </TabsTrigger>
-                      <TabsTrigger value="analytics">
-                        📈 Analytics
-                      </TabsTrigger>
-                      <TabsTrigger value="feature-compare">
-                        📊 Compare
-                      </TabsTrigger>
-                      <TabsTrigger value="doc-preview">
-                        👁️ Doc Preview
-                      </TabsTrigger>
-                      <TabsTrigger value="alignment">
-                        🔗 Alignment
-                      </TabsTrigger>
-                      <TabsTrigger value="heatmap">
-                        🌡️ Heatmap
-                      </TabsTrigger>
-                      <TabsTrigger value="benchmark">
-                        ⚡ Benchmark
-                      </TabsTrigger>
-                    </TabsList>
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                      <Button
+                        onClick={translatePlainText}
+                        disabled={translateStatus === "loading"}
+                        className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-lg shadow-emerald-500/20 text-white"
+                      >
+                        {translateStatus === "loading" ? (
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                        ) : null}
+                        Translate
+                      </Button>
+                      <div className="flex items-center gap-2">
+                        <StatusPill status={translateStatus} label={translateStatus === "success" ? "Translated" : translateStatus === "error" ? "Failed" : "Ready"} />
+                        <Badge variant="outline" className="bg-background/50 backdrop-blur-sm">
+                          {piiCount > 0 ? `${piiCount} protected` : "PII safe"}
+                        </Badge>
+                      </div>
+                    </div>
                   </div>
 
-                  <TabsContent value="interactive">
-                    {isTranslating ? (
-                      <InteractiveOutputSkeleton />
-                    ) : (
-                      <InteractiveOutput />
-                    )}
-                  </TabsContent>
+                  {/* Right Column: Output */}
+                  <div className="p-6 space-y-4 bg-gradient-to-br from-emerald-50/50 to-teal-50/50 dark:from-emerald-950/10 dark:to-teal-950/10 relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Target</label>
+                      <select
+                        className="h-8 w-32 rounded-md border border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-900/20 px-2 text-xs text-emerald-900 dark:text-emerald-100"
+                        value={targetLanguage}
+                        onChange={(event) =>
+                          setTargetLanguage(event.target.value as Language)
+                        }
+                      >
+                        {LANGUAGE_OPTIONS.map((language) => (
+                          <option key={language} value={language}>
+                            {language}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  <TabsContent value="diff">
-                    <TranslationDiffView />
-                  </TabsContent>
+                    <div className="min-h-[240px] rounded-md border border-emerald-100/50 dark:border-emerald-900/30 bg-background/40 backdrop-blur-md p-4 shadow-inner relative z-10">
+                      <AnimatePresence mode="wait">
+                        {translateStatus === "loading" ? (
+                          <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
+                            <Skeleton className="h-4 w-full bg-emerald-500/10" />
+                            <Skeleton className="h-4 w-[90%] bg-emerald-500/10" />
+                            <Skeleton className="h-4 w-[95%] bg-emerald-500/10" />
+                            <Skeleton className="h-4 w-[80%] bg-emerald-500/10" />
+                          </motion.div>
+                        ) : translatedText ? (
+                          <motion.div key="result" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                            <p className="whitespace-pre-wrap text-base text-foreground leading-relaxed">
+                              <TypewriterEffect text={translatedText} />
+                            </p>
+                            {piiTypes.length > 0 ? (
+                              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.5 }} className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-700 dark:text-emerald-300 shadow-sm mt-4">
+                                <ShieldCheck className="size-3.5" />
+                                <span>Protected: {piiTypes.join(", ")}</span>
+                              </motion.div>
+                            ) : null}
+                          </motion.div>
+                        ) : (
+                          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full items-center justify-center text-muted-foreground/50 mt-16">
+                            <p className="text-sm">Translation will appear here...</p>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-                  <TabsContent value="compare">
-                    <TranslationComparison />
-                  </TabsContent>
+          <TabsContent value="documents" id="documents">
+            <Card>
+              <CardHeader>
+                <CardTitle>Document upload</CardTitle>
+                <CardDescription>
+                  Upload a file, translate it, then download the translated file
+                  in the same format.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">
+                      Source language
+                    </label>
+                    <select
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                      value={sourceLanguage}
+                      onChange={(event) =>
+                        setSourceLanguage(event.target.value as Language)
+                      }
+                    >
+                      {LANGUAGE_OPTIONS.map((language) => (
+                        <option key={language} value={language}>
+                          {language}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">
+                      Target language
+                    </label>
+                    <select
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                      value={targetLanguage}
+                      onChange={(event) =>
+                        setTargetLanguage(event.target.value as Language)
+                      }
+                    >
+                      {LANGUAGE_OPTIONS.map((language) => (
+                        <option key={language} value={language}>
+                          {language}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-                  <TabsContent value="3dbook">
-                    <Book3DView />
-                  </TabsContent>
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) processSelectedFile(file);
+                  }}
+                  className={`relative flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-xl transition-all duration-300 ${
+                    isDragging
+                      ? "border-emerald-500 bg-emerald-500/10 scale-[1.02] shadow-lg shadow-emerald-500/20"
+                      : "border-border hover:border-emerald-500/50 hover:bg-muted/50"
+                  }`}
+                >
+                  <Input
+                    type="file"
+                    accept=".pdf,.docx,.csv,.tsv"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) processSelectedFile(file);
+                    }}
+                  />
+                  <div className="flex flex-col items-center gap-4 text-center pointer-events-none">
+                    <motion.div
+                      animate={isDragging ? { y: [0, -10, 0] } : {}}
+                      transition={{ repeat: Infinity, duration: 1 }}
+                      className="p-4 rounded-full bg-background/50 backdrop-blur-sm shadow-sm border border-border"
+                    >
+                      <UploadCloud className={`size-8 ${isDragging ? "text-emerald-500" : "text-muted-foreground"}`} />
+                    </motion.div>
+                    <div>
+                      <p className="text-base font-medium">Click or drag document here</p>
+                      <p className="text-sm text-muted-foreground mt-1">Supports PDF, DOCX, CSV, TSV</p>
+                    </div>
+                  </div>
+                </div>
 
-                  <TabsContent value="font">
-                    <BoundingBoxAdjuster />
-                  </TabsContent>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    onClick={translateDocument}
+                    disabled={documentStatus === "loading" || !documentFileType}
+                    className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-500/20"
+                  >
+                    {documentStatus === "loading" ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : null}
+                    Translate document
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={downloadTranslatedDocument}
+                    disabled={!documentResult}
+                  >
+                    <Download className="mr-2 size-4" />
+                    Download translated document
+                  </Button>
+                  <StatusPill
+                    status={documentStatus}
+                    label={
+                      documentStatus === "success"
+                        ? "Ready"
+                        : documentStatus === "error"
+                          ? "Failed"
+                          : "Idle"
+                    }
+                  />
+                </div>
 
-                  <TabsContent value="graph">
-                    <KnowledgeGraphPanel />
-                  </TabsContent>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Card className="border-dashed bg-background/50 backdrop-blur-sm">
+                    <CardContent className="p-4 text-sm text-muted-foreground">
+                      {documentFile ? (
+                        <div className="flex flex-col items-center text-center space-y-2 py-4">
+                          <FileText className="size-10 text-emerald-500/70" />
+                          <div>
+                            <p className="font-medium text-foreground line-clamp-1">
+                              {documentFile.name}
+                            </p>
+                            <p className="text-xs uppercase mt-1">{documentFileType || "Unsupported"}</p>
+                            <p className="text-xs">{(documentFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex h-full items-center justify-center py-8">
+                          No document selected.
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="border-dashed md:col-span-2 bg-gradient-to-br from-emerald-50/30 to-teal-50/30 dark:from-emerald-950/20 dark:to-teal-950/20">
+                    <CardContent className="p-4 text-sm text-muted-foreground h-full relative">
+                      {documentStatus === "loading" ? (() => {
+                        const fakeProgress = documentProgress;
+                        const mins = Math.floor(documentElapsedSeconds / 60);
+                        const secs = documentElapsedSeconds % 60;
+                        return (
+                          <div className="flex flex-col gap-5 py-4 px-2">
+                            {/* Header */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <motion.div
+                                  animate={{ rotate: 360 }}
+                                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                                  className="size-4 rounded-full border-2 border-emerald-500 border-t-transparent"
+                                />
+                                <span className="text-sm font-medium text-foreground">
+                                  {documentProgressMessage}
+                                </span>
+                              </div>
+                              <span className="font-mono text-xs font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                                {fakeProgress}%
+                              </span>
+                            </div>
 
-                  <TabsContent value="glossary">
-                    <GlossaryManager />
-                  </TabsContent>
+                            {/* Progress track */}
+                            <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-muted/60">
+                              <motion.div
+                                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400"
+                                initial={{ width: "0%" }}
+                                animate={{ width: `${fakeProgress}%` }}
+                                transition={{ duration: 0.3, ease: "easeOut" }}
+                              />
+                              {/* Shimmer overlay */}
+                              <motion.div
+                                className="absolute inset-y-0 w-24 bg-gradient-to-r from-transparent via-white/30 to-transparent rounded-full"
+                                animate={{ x: ["-100%", "500%"] }}
+                                transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                              />
+                            </div>
 
-                  <TabsContent value="tm">
-                    <TranslationMemory />
-                  </TabsContent>
+                            {/* Stats row */}
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">
+                                ⏱ <span className="font-mono font-medium">{mins}m {secs}s</span> elapsed
+                              </span>
+                              <span className="text-emerald-600 dark:text-emerald-400">
+                                ✓ Stream connected
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })() : documentResult ? (
+                        <div className="space-y-2 h-full">
+                          <p className="font-medium text-emerald-800 dark:text-emerald-300">
+                            Translation preview
+                          </p>
+                          <div className="whitespace-pre-wrap text-foreground overflow-y-auto max-h-[150px] pr-2">
+                            <TypewriterEffect text={documentResult.translated} />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex h-full items-center justify-center py-8">
+                          Translated document preview appears here.
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-                  <TabsContent value="quality">
-                    <TranslationQualityScore />
-                  </TabsContent>
+          <TabsContent value="youtube" id="youtube">
+            <Card>
+              <CardHeader>
+                <CardTitle>YouTube subtitles</CardTitle>
+                <CardDescription>
+                  Fetch captions, translate them, and export an SRT file.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm font-medium">YouTube URL</label>
+                    <Input
+                      value={youtubeUrl}
+                      onChange={(event) => setYoutubeUrl(event.target.value)}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">
+                      Source language
+                    </label>
+                    <select
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                      value={sourceLanguage}
+                      onChange={(event) =>
+                        setSourceLanguage(event.target.value as Language)
+                      }
+                    >
+                      {LANGUAGE_OPTIONS.map((language) => (
+                        <option key={language} value={language}>
+                          {language}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">
+                      Target language
+                    </label>
+                    <select
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                      value={targetLanguage}
+                      onChange={(event) =>
+                        setTargetLanguage(event.target.value as Language)
+                      }
+                    >
+                      {LANGUAGE_OPTIONS.map((language) => (
+                        <option key={language} value={language}>
+                          {language}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-                  <TabsContent value="analytics">
-                    <TranslationAnalytics />
-                  </TabsContent>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    onClick={fetchYoutubeSubtitles}
+                    disabled={youtubeStatus === "loading"}
+                  >
+                    {youtubeStatus === "loading" ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : null}
+                    Fetch subtitles
+                  </Button>
+                  <Button
+                    onClick={translateYoutubeSubtitles}
+                    disabled={
+                      !youtubeSubtitles.length ||
+                      youtubeTranslateStatus === "loading"
+                    }
+                  >
+                    {youtubeTranslateStatus === "loading" ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : null}
+                    Translate subtitles
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={downloadYoutubeSrt}
+                    disabled={!translatedYoutubeSubtitles.length}
+                  >
+                    <Download className="mr-2 size-4" />
+                    Download SRT
+                  </Button>
+                  <StatusPill
+                    status={youtubeStatus}
+                    label={
+                      youtubeStatus === "success"
+                        ? youtubeIsDemo
+                          ? "Demo captions"
+                          : "Fetched"
+                        : youtubeStatus === "error"
+                          ? "Failed"
+                          : "Idle"
+                    }
+                  />
+                </div>
 
-                  <TabsContent value="feature-compare">
-                    <TranslationComparisonTable />
-                  </TabsContent>
+                {youtubeTitle ? (
+                  <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+                    <p className="font-medium text-foreground">
+                      {youtubeTitle}
+                    </p>
+                    {youtubeVideoId ? (
+                      <p className="text-xs">Video ID: {youtubeVideoId}</p>
+                    ) : null}
+                  </div>
+                ) : null}
 
-                  <TabsContent value="doc-preview">
-                    <DocumentPreview />
-                  </TabsContent>
-
-                  <TabsContent value="alignment">
-                    <WordAlignmentView />
-                  </TabsContent>
-
-                  <TabsContent value="heatmap">
-                    <ConfidenceHeatmap />
-                  </TabsContent>
-
-                  <TabsContent value="benchmark">
-                    <TranslationBenchmark />
-                  </TabsContent>
-                </Tabs>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Card className="border-dashed">
+                    <CardContent className="p-4 text-sm text-muted-foreground">
+                      <p className="font-medium text-foreground">
+                        Fetched subtitles
+                      </p>
+                      <div className="mt-3 max-h-64 space-y-2 overflow-auto">
+                        {youtubeSubtitles.length > 0 ? (
+                          youtubeSubtitles.slice(0, 8).map((row) => (
+                            <div
+                              key={row.index}
+                              className="rounded-md border p-2"
+                            >
+                              <p className="text-xs text-muted-foreground">
+                                {row.startTime} → {row.endTime}
+                              </p>
+                              <p>{row.text}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <p>No subtitles loaded.</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-dashed">
+                    <CardContent className="p-4 text-sm text-muted-foreground">
+                      <p className="font-medium text-foreground">
+                        Translated subtitles
+                      </p>
+                      <div className="mt-3 max-h-64 space-y-2 overflow-auto">
+                        {translatedYoutubeSubtitles.length > 0 ? (
+                          translatedYoutubeSubtitles.slice(0, 8).map((row) => (
+                            <div
+                              key={row.index}
+                              className="rounded-md border p-2"
+                            >
+                              <p className="text-xs text-muted-foreground">
+                                {row.startTime} → {row.endTime}
+                              </p>
+                              <p>{row.translated}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <p>Translated subtitles appear here.</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
         </motion.div>
       </main>
-
-      {/* Wave divider before About */}
-      <WaveDivider />
-
-      {/* About Section - stagger 4 */}
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-100px' }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-      >
-        <AboutSection />
-      </motion.div>
-
-      {/* Wave divider before Typography Showcase */}
-      <WaveDivider />
-
-      {/* Typography Showcase Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-100px' }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-      >
-        <TypographyShowcase />
-      </motion.div>
-
-      {/* Wave divider before Timeline */}
-      <WaveDivider />
-
-      {/* Timeline Section */}
-      <TimelineSection />
-
-      {/* Wave divider between Timeline and Community */}
-      <WaveDivider flip />
-
-      {/* Community Impact Section */}
-      <CommunitySection />
-
-      {/* Wave divider before Language Map */}
-      <WaveDivider />
-
-      {/* Language Map Section */}
-      <LanguageMapSection />
-
-      {/* Wave divider before FAQ */}
-      <WaveDivider />
-
-      <FAQSection />
-
-      {/* Wave divider before Testimonials */}
-      <WaveDivider />
-
-      {/* Testimonials Section - stagger 5 */}
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-100px' }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-      >
-        <TestimonialsSection />
-      </motion.div>
-
-      {/* Footer - slide-in from bottom */}
-      <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-50px' }}
-        transition={{ duration: 0.7, ease: 'easeOut' }}
-      >
-        <Footer />
-      </motion.div>
+      </div>
     </div>
   );
 }

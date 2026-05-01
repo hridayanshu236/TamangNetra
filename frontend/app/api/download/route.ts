@@ -7,7 +7,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import Papa from 'papaparse';
-import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { PDFDocument } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import {
   Document,
   Packer,
@@ -182,128 +183,154 @@ async function reconstructPDF(
   tgtLang: string
 ): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  pdfDoc.registerFontkit(fontkit);
 
-  const PAGE_WIDTH = 595.28; // A4 width in points
-  const PAGE_HEIGHT = 841.89; // A4 height in points
-  const MARGIN = 50;
-  const LINE_HEIGHT = 16;
-  const FONT_SIZE = 11;
-  const MAX_CHARS_PER_LINE = Math.floor((PAGE_WIDTH - 2 * MARGIN) / (FONT_SIZE * 0.5));
+  // Fetch a font that supports the required characters.
+  // Use Noto Sans Devanagari for Nepali and Tamang, and a general Noto Sans for others.
+  const isDevanagari = tgtLang.toLowerCase() === 'nepali' || tgtLang.toLowerCase() === 'ne' || tgtLang.toLowerCase() === 'tamang' || tgtLang.toLowerCase() === 'tam';
 
-  let page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-  let y = PAGE_HEIGHT - MARGIN;
-
-  // Title
-  const title = `Translated: ${srcLang} → ${tgtLang}`;
-  page.drawText(title, {
-    x: MARGIN,
-    y,
-    size: 16,
-    font,
-    color: { type: 'RGB', red: 0.1, green: 0.5, blue: 0.4 },
-  });
-  y -= 30;
-
-  // Helper: wrap text to fit page width
-  function wrapText(text: string): string[] {
-    const words = text.split(' ');
-    const lines: string[] = [];
-    let currentLine = '';
-
-    for (const word of words) {
-      if ((currentLine + ' ' + word).trim().length > MAX_CHARS_PER_LINE) {
-        if (currentLine) lines.push(currentLine.trim());
-        currentLine = word;
-      } else {
-        currentLine += ' ' + word;
-      }
-    }
-    if (currentLine.trim()) lines.push(currentLine.trim());
-    return lines;
+  let fontUrl: string;
+  if (isDevanagari) {
+    // Noto Sans Devanagari for Nepali and Tamang
+    fontUrl = 'https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf';
+  } else {
+    // Generic fallback for other languages
+    fontUrl = 'https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf';
   }
 
-  // Draw translated segments
-  for (const seg of translatedSegments) {
-    const lines = wrapText(seg.translated);
+  try {
+    const fontResponse = await fetch(fontUrl);
+    if (!fontResponse.ok) {
+      throw new Error(`Failed to fetch font: ${fontResponse.statusText}`);
+    }
+    const fontBytes = await fontResponse.arrayBuffer();
+    const customFont = await pdfDoc.embedFont(fontBytes);
 
-    for (const line of lines) {
-      if (y < MARGIN + LINE_HEIGHT) {
-        // New page
-        page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-        y = PAGE_HEIGHT - MARGIN;
-      }
+    const PAGE_WIDTH = 595.28; // A4 width in points
+    const PAGE_HEIGHT = 841.89; // A4 height in points
+    const MARGIN = 50;
+    const LINE_HEIGHT = 16;
+    const FONT_SIZE = 11;
+    const MAX_CHARS_PER_LINE = Math.floor((PAGE_WIDTH - 2 * MARGIN) / (FONT_SIZE * 0.6));
 
-      try {
-        page.drawText(line, {
-          x: MARGIN,
-          y,
-          size: FONT_SIZE,
-          font,
-          color: { type: 'RGB', red: 0.2, green: 0.2, blue: 0.2 },
-        });
-      } catch {
-        // If character encoding fails, skip the line
-        page.drawText('[text could not be rendered]', {
-          x: MARGIN,
-          y,
-          size: FONT_SIZE,
-          font,
-          color: { type: 'RGB', red: 0.6, green: 0.6, blue: 0.6 },
-        });
+    let page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    let y = PAGE_HEIGHT - MARGIN;
+
+    // Title
+    const title = `Translated: ${srcLang} to ${tgtLang}`;
+    page.drawText(title, {
+      x: MARGIN,
+      y,
+      size: 16,
+      font: customFont,
+      color: { type: 'RGB', red: 0.1, green: 0.5, blue: 0.4 },
+    });
+    y -= 30;
+
+    // Helper: wrap text to fit page width
+    function wrapText(text: string): string[] {
+      const words = text.split(' ');
+      const lines: string[] = [];
+      let currentLine = '';
+
+      for (const word of words) {
+        if ((currentLine + ' ' + word).trim().length > MAX_CHARS_PER_LINE) {
+          if (currentLine) lines.push(currentLine.trim());
+          currentLine = word;
+        } else {
+          currentLine += ' ' + word;
+        }
       }
-      y -= LINE_HEIGHT;
+      if (currentLine.trim()) lines.push(currentLine.trim());
+      return lines;
     }
 
-    y -= LINE_HEIGHT / 2; // Extra spacing between segments
-  }
+    // Draw translated segments
+    for (const seg of translatedSegments) {
+      const lines = wrapText(seg.translated);
 
-  // Separator page with original text
-  page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-  y = PAGE_HEIGHT - MARGIN;
+      for (const line of lines) {
+        if (y < MARGIN + LINE_HEIGHT) {
+          // New page
+          page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+          y = PAGE_HEIGHT - MARGIN;
+        }
 
-  page.drawText('--- Original Text ---', {
-    x: MARGIN,
-    y,
-    size: 14,
-    font,
-    color: { type: 'RGB', red: 0.5, green: 0.5, blue: 0.5 },
-  });
-  y -= 30;
-
-  for (const seg of translatedSegments) {
-    const lines = wrapText(seg.original);
-
-    for (const line of lines) {
-      if (y < MARGIN + LINE_HEIGHT) {
-        page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-        y = PAGE_HEIGHT - MARGIN;
+        try {
+          page.drawText(line, {
+            x: MARGIN,
+            y,
+            size: FONT_SIZE,
+            font: customFont,
+            color: { type: 'RGB', red: 0.2, green: 0.2, blue: 0.2 },
+          });
+        } catch {
+          // If character encoding fails, skip the line
+          page.drawText('[text could not be rendered]', {
+            x: MARGIN,
+            y,
+            size: FONT_SIZE,
+            font: customFont,
+            color: { type: 'RGB', red: 0.6, green: 0.6, blue: 0.6 },
+          });
+        }
+        y -= LINE_HEIGHT;
       }
 
-      try {
-        page.drawText(line, {
-          x: MARGIN,
-          y,
-          size: FONT_SIZE,
-          font,
-          color: { type: 'RGB', red: 0.5, green: 0.5, blue: 0.5 },
-        });
-      } catch {
-        page.drawText('[text could not be rendered]', {
-          x: MARGIN,
-          y,
-          size: FONT_SIZE,
-          font,
-          color: { type: 'RGB', red: 0.7, green: 0.7, blue: 0.7 },
-        });
-      }
-      y -= LINE_HEIGHT;
+      y -= LINE_HEIGHT / 2; // Extra spacing between segments
     }
 
-    y -= LINE_HEIGHT / 2;
-  }
+    // Separator page with original text
+    page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    y = PAGE_HEIGHT - MARGIN;
 
-  return pdfDoc.save();
+    page.drawText('--- Original Text ---', {
+      x: MARGIN,
+      y,
+      size: 14,
+      font: customFont,
+      color: { type: 'RGB', red: 0.5, green: 0.5, blue: 0.5 },
+    });
+    y -= 30;
+
+    for (const seg of translatedSegments) {
+      const lines = wrapText(seg.original);
+
+      for (const line of lines) {
+        if (y < MARGIN + LINE_HEIGHT) {
+          page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+          y = PAGE_HEIGHT - MARGIN;
+        }
+
+        try {
+          page.drawText(line, {
+            x: MARGIN,
+            y,
+            size: FONT_SIZE,
+            font: customFont,
+            color: { type: 'RGB', red: 0.5, green: 0.5, blue: 0.5 },
+          });
+        } catch {
+          page.drawText('[text could not be rendered]', {
+            x: MARGIN,
+            y,
+            size: FONT_SIZE,
+            font: customFont,
+            color: { type: 'RGB', red: 0.7, green: 0.7, blue: 0.7 },
+          });
+        }
+        y -= LINE_HEIGHT;
+      }
+
+      y -= LINE_HEIGHT / 2;
+    }
+
+    return pdfDoc.save();
+  } catch (fontError) {
+    console.error('Font loading or embedding failed:', fontError);
+    // Fallback to a simple text file if font loading fails
+    throw new Error('Failed to load or embed the required font for PDF generation.');
+  }
 }
 
 /**
