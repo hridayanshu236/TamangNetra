@@ -2,113 +2,80 @@
 
 ## Overview
 
-TamangNetra is a translation pipeline with a React + Vite frontend and FastAPI backend.
-It supports:
-- text translation
-- document translation for PDF, DOCX, CSV/TSV
-- OCR image translation
+TamangNetra is a single-project Next.js application for translation and language tools. The app is implemented inside the `frontend/` folder and includes:
+- text translation and assistant flows
+- document processing and multilingual export
+- OCR/image translation support
 - YouTube subtitle translation
+- analytics, translation memory, and glossary helpers
 
-## Backend Setup
+## Repository Structure
 
-1. Go to the project root (TamangNetra):
+- `.env` - local environment variables used by the app
+- `frontend/` - Next.js application source code
+  - `frontend/app/` - page and API route implementation
+  - `frontend/src/components/` - reusable UI and feature components
+  - `frontend/package.json` - frontend scripts and dependencies
+
+## Local Setup
+
+1. Install dependencies from the project root:
    ```bash
-   cd TamangNetra
-   ```
-
-2. Create and activate a Python virtual environment:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-
-3. Install backend dependencies:
-   ```bash
-   pip install -r backend/requirements.txt
-   ```
-
-4. Create the `.env` file in the `backend` directory:
-   ```bash
-   cd backend
-   cp .env.example .env
-   ```
-
-5. Edit `backend/.env` and set the required values:
-   ```bash
-   TMT_TOKEN=your_actual_token_here
-   FRONTEND_URL=http://localhost:5173
-   ```
-
-6. Run the backend server from the project root:
-   ```bash
-   cd ..
-   uvicorn backend.api.main:app --reload --host 0.0.0.0 --port 8000
-   ```
-
-## Frontend Setup
-
-1. Go to the frontend folder from the project root:
-   ```bash
-   cd tamangnetra-frontend
-   ```
-
-2. Install dependencies:
-   ```bash
+   cd TamangNetra/frontend
    npm install
    ```
 
-3. Run the frontend dev server:
+2. Start the development server:
    ```bash
    npm run dev
    ```
 
-4. (Optional) Add `VITE_API_BASE` to a `.env` file in `tamangnetra-frontend` if you need a custom backend URL:
-   ```bash
-   VITE_API_BASE=http://localhost:8000
+3. Open the app in your browser:
+   ```text
+   http://localhost:3000
    ```
 
-## API Endpoints
+## Environment Variables
 
-- `POST /translate-text`
-  - JSON body: `{ text, src_lang, tgt_lang }`
-  - Response: `{ output }`
+The root `.env` file contains values used by the app. Example variables in this repository:
 
-- `POST /translate-file`
-  - Form data: `file`, `src_lang`, `tgt_lang`
-  - Response: `{ filename, download_url, glossary }`
+```env
+TMT_TOKEN=team_xxxxxxxxx
+FRONTEND_URL=http://localhost:5173
+```
 
-- `POST /ocr-translate`
-  - JSON body: `{ image_b64, src_lang, tgt_lang, pen_bbox? }`
+If additional environment variables are required, add them to `.env` or `frontend/.env` as needed.
 
-- `POST /youtube-translate`
-  - JSON body: `{ url, src_lang, tgt_lang }`
+## Available Scripts
 
-- `GET /download/{job_id}/{filename}`
-  - Downloads the translated file.
+From `frontend/`:
+
+- `npm run dev` - start the Next.js development server
+- `npm run build` - build the production app
+- `npm run start` - run the production server after build
+- `npm run lint` - run ESLint
+- `npm run db:push` - push Prisma schema to the database
+- `npm run db:generate` - generate Prisma client
+- `npm run db:migrate` - run Prisma migrations
+- `npm run db:reset` - reset Prisma migrations
+
+## API Routes
+
+The app provides internal API routes under `frontend/app/api/`, including:
+- `/api/translate`
+- `/api/youtube`
+- `/api/tts`
+- `/api/asr`
+- `/api/process-file`
+- `/api/export-bilingual`
+- `/api/download`
+- `/api/stats`
+- `/api/assistant`
 
 ## Notes
 
-- The frontend now uses Tailwind CSS for layout and styling.
-- The backend is configured to allow requests from `http://localhost:5173`.
-- The external translator is called with `Authorization: Bearer <TMT_TOKEN>`.
-- Document translation supports PDF, DOCX, CSV, and TSV files.
-- Image OCR translation accepts base64 images and optional bounding boxes.
-
-## Running the App
-
-**Terminal 1 (Backend):**
-```bash
-cd TamangNetra
-source .venv/bin/activate
-uvicorn backend.api.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-**Terminal 2 (Frontend):**
-```bash
-cd TamangNetra/tamangnetra-frontend
-npm run dev
-```
-
-Then open the frontend at `http://localhost:5173` and use the interface to translate text, documents, images, or YouTube subtitles.
+- The frontend is built with Next.js 16, React 19, Tailwind CSS, Prisma, and a large component library.
+- The current repository does not include a separate Python backend.
+- Use the actual `frontend/` path for installs and commands.
 
 
