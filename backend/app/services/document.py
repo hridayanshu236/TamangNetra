@@ -1,4 +1,5 @@
 import io
+import hashlib
 import tempfile
 import pandas as pd
 from typing import List, Dict, Any, Optional, Tuple
@@ -14,6 +15,14 @@ import logging
 from app.services.translation import get_translation_service, TranslationService
 from app.core.config import Settings
 from app.models.schemas import TranslationRequest
+
+# New PDF Pipeline
+from .pdf.extractor import PdfExtractor, PageData
+from .pdf.reconstructor import PdfReconstructor
+try:
+    from .pdf.ocr import OcrHandler
+except ImportError:
+    OcrHandler = None
 
 logger = logging.getLogger(__name__)
 
@@ -34,43 +43,45 @@ def _get_font_bytes(url: str) -> bytes:
 class DocumentProcessor:
     def __init__(self, translation_service: TranslationService):
         self.translation_service = translation_service
+        self.pdf_extractor = PdfExtractor()
+        self.pdf_reconstructor = PdfReconstructor(
+            font_regular_path="assets/fonts/NotoSansDevanagari-Regular.ttf",
+            font_bold_path="assets/fonts/NotoSansDevanagari-Bold.ttf"
+        )
+        self.ocr_handler = OcrHandler() if OcrHandler else None
+        # Cache for translation mappings: {file_hash: {src_text: tgt_text}}
+        self._translation_cache: Dict[str, Dict[str, str]] = {}
 
-    async def process_pdf(self, file_content: bytes) -> str:
-        """Extract text from PDF block-by-block with OCR fallback."""
-        doc = fitz.open(stream=file_content, filetype="pdf")
-        text_segments = []
-        for page_num in range(len(doc)):
-            page = doc.load_page(page_num)
-            blocks = page.get_text("dict")["blocks"]
-            found_text = False
-            for block in blocks:
-                if block.get("type") == 0:  # text block
-                    block_text = ""
-                    for line in block["lines"]:
-                        for span in line["spans"]:
-                            block_text += span["text"]
-                        if not block_text.endswith(" ") and not block_text.endswith("-"):
-                            block_text += " "
-                    if block_text.strip():
-                        text_segments.append(block_text.strip())
-                        found_text = True
-            
-            # If no text found on page, try OCR on images
-            if not found_text:
-                image_list = page.get_images(full=True)
-                for img_index, img in enumerate(image_list):
-                    xref = img[0]
-                    base_image = doc.extract_image(xref)
-                    image_bytes = base_image["image"]
-                    try:
-                        image = Image.open(io.BytesIO(image_bytes))
-                        ocr_text = pytesseract.image_to_string(image)
-                        if ocr_text.strip():
-                            text_segments.append(ocr_text.strip())
-                    except Exception as e:
-                        logger.debug(f"OCR skipped for page {page_num}: {e}")
+    async def process_pdf(self, file_content: bytes, src_lang: str, tgt_lang: str, progress_callback=None) -> str:
+        """Extract and translate PDF content, populating the cache for reconstruction."""
+        file_hash = hashlib.md5(file_content).hexdigest()
+        cache_key = f"{file_hash}_{src_lang}_{tgt_lang}"
+        
+        pages_data = self.pdf_extractor.extract(file_content)
+        all_text = []
+        
+        for page in pages_data:
+            for span in page.spans:
+                all_text.append(span.text)
+            for table in page.tables:
+                for row in table.rows:
+                    if row:
+                        all_text.append(" | ".join([str(c) if c else "" for c in row]))
+            if self.ocr_handler:
+                for img in page.images:
+                    ocr_results = self.ocr_handler.extract_text_from_image(img.image_bytes)
+                    for res in ocr_results:
+                        all_text.append(res["text"])
+        
+        unique_texts = list(set([t for t in all_text if t.strip()]))
+        translated_list = await self.translation_service.batch_translate(
+            unique_texts, src_lang, tgt_lang, progress_callback=progress_callback
+        )
+        
+        # Populate cache for reconstruction
+        self._translation_cache[cache_key] = dict(zip(unique_texts, translated_list))
                         
-        return "---EXACT-BLOCK---".join(text_segments)
+        return "---EXACT-BLOCK---".join(translated_list)
 
     async def process_docx(self, file_content: bytes) -> str:
         """Extract text from DOCX run-by-run to match reconstruction exactly."""
@@ -127,7 +138,7 @@ class DocumentProcessor:
         
         try:
             if filename.endswith(".pdf"):
-                extracted_text = await self.process_pdf(content)
+                extracted_text = await self.process_pdf(content, src_lang, tgt_lang, progress_callback=progress_callback)
             elif filename.endswith(".docx"):
                 extracted_text = await self.process_docx(content)
             elif filename.endswith(".csv"):
@@ -230,128 +241,44 @@ class DocumentProcessor:
             raise ValueError(f"Error reconstructing document: {str(e)}")
 
     async def _reconstruct_pdf(self, content: bytes, src_lang: str, tgt_lang: str) -> bytes:
-        doc = fitz.open(stream=content, filetype="pdf")
-
-        is_devanagari = tgt_lang.lower() in ("nepali", "ne", "tamang", "tam")
-        font_bytes = None
-        if is_devanagari:
-            try:
-                # Direct link to Noto Sans Devanagari Regular
-                font_url = "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansdevanagari/NotoSansDevanagari-Regular.ttf"
-                font_bytes = _get_font_bytes(font_url)
-            except Exception as e:
-                logger.error(f"Failed to download Devanagari font: {e}")
-
-        # ── Collect per-page data using EXACT SAME extraction as process_pdf ──
-        page_blocks_data = []
-        all_blocks_text = []
-
-        for page in doc:
-            page_blocks = []
-            img_rects = []
-            blocks = page.get_text("dict")["blocks"]
-            
-            for block in blocks:
-                if block.get("type") == 1:
-                    img_rects.append(fitz.Rect(block["bbox"]))
-
-            def overlaps_image(bbox: fitz.Rect) -> bool:
-                for ir in img_rects:
-                    inter = bbox & ir
-                    if not inter.is_empty and inter.get_area() > 0.5 * bbox.get_area():
-                        return True
-                return False
-
-            found_any = False
-            for block in blocks:
-                if block.get("type") == 0:
-                    rect = fitz.Rect(block["bbox"])
-                    # Safeguard: Skip background blocks that cover most of the page
-                    if rect.width > page.rect.width * 0.8 and rect.height > page.rect.height * 0.8:
-                        continue
-
-                    block_text = ""
-                    first_size = 11.0
-                    for line in block["lines"]:
-                        for span in line["spans"]:
-                            block_text += span["text"]
-                            first_size = span.get("size", first_size)
-                        if not block_text.endswith(" ") and not block_text.endswith("-"):
-                            block_text += " "
-                            
-                    block_text = block_text.strip()
-                    if block_text:
-                        all_blocks_text.append(block_text)
-                        page_blocks.append({
-                            "rect": rect,
-                            "size": first_size,
-                            "overlaps_image": overlaps_image(rect),
-                            "is_ocr": False
-                        })
-                        found_any = True
-            
-            # OCR fallback for reconstruction
-            if not found_any:
-                image_list = page.get_images(full=True)
-                for img in image_list:
-                    xref = img[0]
-                    bbox = page.get_image_bbox(img)
-                    base_image = doc.extract_image(xref)
-                    try:
-                        image = Image.open(io.BytesIO(base_image["image"]))
-                        ocr_text = pytesseract.image_to_string(image).strip()
-                        if ocr_text:
-                            all_blocks_text.append(ocr_text)
-                            page_blocks.append({
-                                "rect": bbox,
-                                "size": 12.0,
-                                "overlaps_image": False,
-                                "is_ocr": True
-                            })
-                    except: continue
-
-            page_blocks_data.append((page, page_blocks))
-
-        if not all_blocks_text:
-            return doc.write()
-
-        translated = await self.translation_service.batch_translate(
-            all_blocks_text, src_lang, tgt_lang
-        )
-
-        idx = 0
+        """High-fidelity PDF reconstruction using ReportLab and Noto Sans Devanagari."""
+        file_hash = hashlib.md5(content).hexdigest()
+        cache_key = f"{file_hash}_{src_lang}_{tgt_lang}"
         
-        for page, page_blocks in page_blocks_data:
-            # Register font and get the internal name (e.g. 'f0')
-            registered_font = "helv"
-            if font_bytes:
-                try:
-                    registered_font = page.insert_font(fontname="noto", fontbuffer=font_bytes)
-                except Exception as e:
-                    logger.error(f"Page font insertion failed: {e}")
-            
-            for b in page_blocks:
-                trans_text = translated[idx]
-                idx += 1
-                
-                if not b["overlaps_image"]:
-                    try:
-                        # 1. Clear the original text area with a white box
-                        page.draw_rect(b["rect"], color=(1, 1, 1), fill=(1, 1, 1), overlay=True)
-                        
-                        # 2. Insert translated text using the registered font name
-                        page.insert_textbox(
-                            b["rect"],
-                            trans_text,
-                            fontsize=b["size"],
-                            fontname=registered_font,
-                            align=0,
-                            color=(0, 0, 0)
-                        )
-                    except Exception as e:
-                        logger.warning(f"Text insertion failed for block: {e}")
+        pages_data = self.pdf_extractor.extract(content)
+        
+        texts_to_translate = []
+        for page in pages_data:
+            for span in page.spans:
+                texts_to_translate.append(span.text)
+            for table in page.tables:
+                for row in table.rows:
+                    if row:
+                        texts_to_translate.extend([str(c) if c else "" for c in row])
+            if self.ocr_handler:
+                for img in page.images:
+                    ocr_res = self.ocr_handler.extract_text_from_image(img.image_bytes)
+                    texts_to_translate.extend([r["text"] for r in ocr_res])
 
-        return doc.write()
+        if not texts_to_translate:
+            return content
+
+        # Check if we have a fully populated cache for this file
+        if cache_key in self._translation_cache:
+            logger.info(f"Using cached translation mapping for {cache_key}")
+            trans_map = self._translation_cache[cache_key]
+        else:
+            # Batch translate all segments
+            unique_texts = list(set([t for t in texts_to_translate if t.strip()]))
+            translated_list = await self.translation_service.batch_translate(
+                unique_texts, src_lang, tgt_lang
+            )
+            # Create mapping and store in cache
+            trans_map = dict(zip(unique_texts, translated_list))
+            self._translation_cache[cache_key] = trans_map
+        
+        # Reconstruct
+        return self.pdf_reconstructor.reconstruct(pages_data, trans_map)
 
 
 

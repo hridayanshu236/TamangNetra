@@ -87,7 +87,8 @@ async def reconstruct_document(
             io.BytesIO(content_bytes),
             media_type=content_type,
             headers={
-                "Content-Disposition": f'attachment; filename="{download_name}"'
+                "Content-Disposition": f'attachment; filename="{download_name}"',
+                "Content-Length": str(len(content_bytes))
             }
         )
     except ValueError as e:
