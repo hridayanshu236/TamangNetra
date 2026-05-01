@@ -40,11 +40,11 @@ TamangNetra is a single-project Next.js application for translation and language
 The root `.env` file contains values used by the app. Example variables in this repository:
 
 ```env
-TMT_TOKEN=team_xxxxxxxxx
-FRONTEND_URL=http://localhost:5173
+TMT_API_TOKEN = team_xxxxxxxxx
 ```
 
-If additional environment variables are required, add them to `.env` or `frontend/.env` as needed.
+If additional environment variables are required, add them to `frontend/.env` as needed.
+
 
 ## Available Scripts
 
