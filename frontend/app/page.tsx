@@ -541,28 +541,39 @@ export default function Home() {
       const videoId = extractVideoId(youtubeUrl.trim());
       if (!videoId) throw new Error("Invalid YouTube URL");
 
-      // Use a specialized No-CORS YouTube Transcript API
-      // This is much more reliable than general proxies
-      const transcriptUrl = `https://yt.lemnoslife.com/no-cors/transcript?v=${videoId}&lang=${sourceLanguage === 'English' ? 'en' : 'ne'}`;
-      console.log(`[YouTube] Fetching via No-CORS API: ${transcriptUrl}`);
+      // 1. Fetch Video Page via CodeTabs Proxy (Very reliable for CORS)
+      const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
+      console.log(`[YouTube] Fetching via CodeTabs: ${proxyUrl}`);
       
-      const response = await fetch(transcriptUrl);
-      if (!response.ok) throw new Error("Failed to fetch transcript from No-CORS API");
-      
-      const data = await response.json();
-      
-      if (!data.events || data.events.length === 0) {
-        throw new Error("No transcript events found for this video.");
-      }
+      const pageResponse = await fetch(proxyUrl);
+      if (!pageResponse.ok) throw new Error("Failed to fetch video page via proxy");
+      const pageHtml = await pageResponse.text();
 
-      // Format segments
-      const formattedSubtitles = data.events
+      // 2. Parse captionTracks
+      const regex = /"captionTracks":\s*(\[.*?\])/;
+      const match = pageHtml.match(regex);
+      if (!match) throw new Error("No captions found for this video.");
+      const captionTracks = JSON.parse(match[1]);
+      
+      const langMapping: Record<string, string> = { 'English': 'en', 'Nepali': 'ne', 'Tamang': 'ne' };
+      const targetLangCode = langMapping[sourceLanguage] || 'en';
+      
+      let track = captionTracks.find((t: any) => t.languageCode === targetLangCode);
+      if (!track) track = captionTracks.find((t: any) => t.languageCode === 'en');
+      if (!track) track = captionTracks[0];
+
+      if (!track?.baseUrl) throw new Error("No suitable transcript track found.");
+
+      // 3. Fetch transcript content via CodeTabs Proxy
+      const subProxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(track.baseUrl + '&fmt=json3')}`;
+      const subResponse = await fetch(subProxyUrl);
+      const transcriptData = await subResponse.json();
+
+      // 4. Format segments
+      const formattedSubtitles = transcriptData.events
         .filter((e: any) => e.segs && e.segs.length > 0)
         .map((event: any, i: number) => {
           const text = event.segs.map((s: any) => s.utf8).join("").trim();
-          const start = event.tStartMs / 1000;
-          const duration = event.dDurationMs / 1000;
-          
           const formatTime = (seconds: number) => {
             const h = Math.floor(seconds / 3600);
             const m = Math.floor((seconds % 3600) / 60);
@@ -570,11 +581,10 @@ export default function Home() {
             const ms = Math.floor((seconds % 1) * 1000);
             return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
           };
-
           return {
             index: i + 1,
-            startTime: formatTime(start),
-            endTime: formatTime(start + duration),
+            startTime: formatTime(event.tStartMs / 1000),
+            endTime: formatTime((event.tStartMs + (event.dDurationMs || 0)) / 1000),
             text
           };
         })
@@ -587,9 +597,7 @@ export default function Home() {
       setTranslatedYoutubeSubtitles([]);
       setYoutubeStatus("success");
       
-      console.log(`[YouTube] Successfully fetched ${formattedSubtitles.length} segments via No-CORS API.`);
-
-      console.log(`[YouTube] Successfully fetched ${formattedSubtitles.length} segments via No-CORS API.`);
+      console.log(`[YouTube] Successfully fetched ${formattedSubtitles.length} segments via CodeTabs.`);
     } catch {
       setYoutubeStatus("error");
     }
