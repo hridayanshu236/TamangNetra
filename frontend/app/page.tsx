@@ -386,30 +386,6 @@ export default function Home() {
     }
   };
 
-  /** Helper to process a single NDJSON line from the stream */
-  const processLine = (line: string) => {
-    try {
-      const data = JSON.parse(line);
-      
-      if (data.type === "status") {
-        setDocumentProgressMessage(data.message);
-      } else if (data.type === "progress") {
-        const progress = Math.round((data.current / data.total) * 100);
-        setDocumentProgress(progress);
-        setDocumentProgressMessage(`Translating sentences (${data.current}/${data.total})...`);
-        
-        // HANDLE INCREMENTAL SEGMENTS
-        if (data.segment) {
-          setIncrementalSegments(prev => {
-            // Check if segment already exists to avoid duplicates
-            const exists = prev.some(s => s.original === data.segment.original);
-            if (exists) return prev;
-            return [...prev, data.segment];
-          });
-        }
-      } else if (data.type === "result") {
-        const resultData = data.data;
-        
   const generateKnowledgeEntries = (segments: Array<{ original: string; translated: string }>) => {
     const termMap = new Map<string, { translation: string; frequency: number }>();
     for (const seg of (segments || [])) {
@@ -430,27 +406,6 @@ export default function Home() {
       }))
       .filter(entry => entry.frequency > 1)
       .sort((a, b) => b.frequency - a.frequency);
-  };
-        
-        const finalResult: ProcessFileResult = {
-          original: resultData.original || "",
-          translated: resultData.translated || "",
-          segments: resultData.segments || [],
-          knowledgeEntries,
-          fileInfo: resultData.fileInfo || {
-            name: documentFile?.name || "document",
-            type: documentFileType || "pdf",
-            size: documentFile?.size || 0,
-          }
-        };
-        setDocumentResult(finalResult);
-        setDocumentStatus("success");
-      } else if (data.type === "error") {
-        throw new Error(data.message);
-      }
-    } catch (e) {
-      console.error("Failed to parse stream line:", line, e);
-    }
   };
 
   /** Fetch (or return cached) translated document blob from the backend reconstruct endpoint. */
