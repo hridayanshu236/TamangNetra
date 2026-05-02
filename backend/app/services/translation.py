@@ -196,9 +196,9 @@ class TranslationService:
             if re.search(r"https?://\S+|www\.\S+", s): return False
             
             # Heuristic: If it has very few letters relative to its length, it's likely a technical string
-            # count both English and Devanagari letters
+            # Relaxed threshold to 0.1 to allow technical sentences
             letters = len(re.findall(r'[a-zA-Z\u0900-\u097F]', s))
-            if len(s) > 10 and letters / len(s) < 0.2:
+            if len(s) > 15 and letters / len(s) < 0.1:
                 return False
 
             return True

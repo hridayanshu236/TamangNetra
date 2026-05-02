@@ -38,10 +38,13 @@ class DocumentProcessor:
     def _is_math(self, text: str) -> bool:
         """Heuristic to identify math/formulas that should not be translated."""
         t = text.strip()
-        if len(t) <= 2 and not t.isalnum(): return True
-        if any(c in t for c in ['=', '+', '-', '*', '/', '^', '(', ')', '[', ']', '{', '}', '>', '<', '∫', '∑', '∏', '√', '∂', '∆']):
-            if len(t) < 15: return True
-        if '\\' in t or '_' in t: return True
+        # Extremely short non-alphanumeric strings (e.g. "=", "+", "x")
+        if len(t) <= 1 and not t.isalnum(): return True
+        # Common math symbols if the string is very short (e.g. "z =", "1+")
+        if any(c in t for c in ['=', '+', '^', '∫', '∑', '∏', '√', '∂', '∆']):
+            if len(t) < 8: return True
+        # LaTeX-like patterns or underscores (usually variables)
+        if '\\' in t or (len(t) < 10 and '_' in t): return True
         return False
 
     async def process_pdf(self, file_content: bytes, src_lang: str, tgt_lang: str, progress_callback=None, cache_only: bool = False) -> Dict[str, Any]:
@@ -63,7 +66,6 @@ class DocumentProcessor:
                 if not self._is_math(t):
                     translatable_texts.append(t)
             
-            # Use cache_only if requested (crucial for reconstruction phase)
             translated_list = await self.translation_service.batch_translate(
                 translatable_texts, src_lang, tgt_lang, 
                 progress_callback=progress_callback, 
@@ -101,7 +103,6 @@ class DocumentProcessor:
         filename = file_name.lower()
         try:
             if filename.endswith(".pdf"):
-                # First pass: normal translation (hits API if needed)
                 pdf_res = await self.process_pdf(file_content, src_lang, tgt_lang, progress_callback=progress_callback, cache_only=False)
                 return {**pdf_res, "fileInfo": {"name": file_name, "type": "pdf", "size": file_size}}
             
@@ -125,7 +126,6 @@ class DocumentProcessor:
         filename = file.filename.lower()
         try:
             if filename.endswith(".pdf"):
-                # CRITICAL: Use cache_only=True during reconstruction to avoid redundant API hits
                 processed = await self.process_pdf(content, src_lang, tgt_lang, cache_only=True)
                 trans_map = {item["original"]: item["translated"] for item in processed["segments"]}
                 reconstructed = self.native_reconstructor.reconstruct(content, trans_map)
