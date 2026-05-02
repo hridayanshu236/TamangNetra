@@ -44,6 +44,10 @@ class DocumentProcessor:
         if '\\' in t or (len(t) < 10 and '_' in t): return True
         return False
 
+    def _normalize(self, t: str) -> str:
+        """Helper for consistent whitespace handling."""
+        return re.sub(r'\s+', ' ', t).strip()
+
     async def _process_spreadsheet(self, file_content: bytes, file_type: str, src_lang: str, tgt_lang: str, progress_callback=None) -> Dict[str, Any]:
         """Restored spreadsheet processing with real-time progress updates."""
         if file_type == "csv":
@@ -90,8 +94,11 @@ class DocumentProcessor:
             
             translatable_texts = []
             for t in list(set(orig_texts)):
-                if not self._is_math(t):
-                    translatable_texts.append(t)
+                cleaned = self._normalize(t)
+                if cleaned and not self._is_math(cleaned):
+                    translatable_texts.append(cleaned)
+            
+            logger.info(f"PDF Extraction: Found {len(orig_texts)} spans, {len(translatable_texts)} translatable unique strings.")
             
             translated_list = await self.translation_service.batch_translate(
                 translatable_texts, src_lang, tgt_lang, 
@@ -102,11 +109,15 @@ class DocumentProcessor:
             
             trans_map = dict(zip(translatable_texts, translated_list))
             
+            # Diagnostic: Count how many actually got translated
+            translated_count = sum(1 for k, v in trans_map.items() if k != v)
+            logger.info(f"Translation Map: {translated_count}/{len(trans_map)} strings actually translated.")
+            
             results = []
             for t in orig_texts:
                 results.append({
                     "original": t,
-                    "translated": trans_map.get(t, t)
+                    "translated": trans_map.get(self._normalize(t), t)
                 })
                 
             return {
@@ -115,7 +126,7 @@ class DocumentProcessor:
                 "segments": results
             }
         except Exception as e:
-            logger.error(f"Native PDF extraction failed: {e}")
+            logger.error(f"Native PDF extraction failed: {e}", exc_info=True)
             return {"original": "", "translated": "", "segments": []}
 
     async def process_docx(self, file_content: bytes) -> str:
@@ -148,7 +159,6 @@ class DocumentProcessor:
                 if filename.endswith(".csv"): file_type = "csv"
                 elif filename.endswith(".tsv"): file_type = "tsv"
                 else: file_type = "xlsx"
-                # FIXED: Now passing progress_callback for real-time spreadsheet updates
                 res = await self._process_spreadsheet(file_content, file_type, src_lang, tgt_lang, progress_callback=progress_callback)
                 return {**res, "fileInfo": {"name": file_name, "type": file_type, "size": file_size}}
             
@@ -165,6 +175,29 @@ class DocumentProcessor:
                 trans_map = {item["original"]: item["translated"] for item in processed["segments"]}
                 reconstructed = self.native_reconstructor.reconstruct(content, trans_map)
                 return reconstructed, "application/pdf"
+            
+            if filename.endswith(".docx"):
+                doc = DocxDocument(io.BytesIO(content))
+                # Collect all unique runs for batch translation lookup
+                run_texts = []
+                for para in doc.paragraphs:
+                    for run in para.runs:
+                        if run.text.strip(): run_texts.append(run.text)
+                
+                # Use cache_only for fast reconstruction
+                unique_runs = list(set(run_texts))
+                translated = await self.translation_service.batch_translate(unique_runs, src_lang, tgt_lang, cache_only=True)
+                trans_map = dict(zip(unique_runs, translated))
+                
+                # Replace in document
+                for para in doc.paragraphs:
+                    for run in para.runs:
+                        if run.text.strip():
+                            run.text = trans_map.get(run.text, run.text)
+                
+                out_buffer = io.BytesIO()
+                doc.save(out_buffer)
+                return out_buffer.getvalue(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             
             if filename.endswith((".csv", ".tsv", ".xlsx")):
                 if filename.endswith(".csv"): file_type = "csv"
@@ -183,7 +216,6 @@ class DocumentProcessor:
                 for _, row in df.iterrows():
                     for val in row: texts.append(str(val) if pd.notnull(val) else "")
                 
-                # Reconstruct also uses cache_only to be fast
                 translated = await self.translation_service.batch_translate(texts, src_lang, tgt_lang, cache_only=True)
                 trans_map = dict(zip(texts, translated))
                 

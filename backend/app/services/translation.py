@@ -64,6 +64,12 @@ def _kg_key(text: str, src: str, tgt: str) -> str:
 _load_knowledge_graph()
 
 
+def _normalize(t: str) -> str:
+    """Collapse multiple spaces/tabs/newlines into a single space and strip."""
+    import re
+    return re.sub(r'\s+', ' ', t).strip()
+
+
 class TranslationService:
     """Service for translation operations."""
 
@@ -217,7 +223,7 @@ class TranslationService:
                 results[i] = ""
                 skipped += 1
             else:
-                normalized = text.strip()
+                normalized = _normalize(text)
                 if not translate_all and not _is_translatable(normalized):
                     results[i] = text
                     skipped += 1
@@ -240,7 +246,6 @@ class TranslationService:
             logger.info(f"Cache misses ({len(uncached_indices)}/{total}): {misses}")
 
         # ── Phase 2: Translate uncached texts concurrently ────────────────────
-        # Reduced concurrency to 3 to avoid 429 rate limits
         MAX_CONCURRENT = 3
         semaphore = asyncio.Semaphore(MAX_CONCURRENT)
         lock = asyncio.Lock()
@@ -248,7 +253,7 @@ class TranslationService:
         async def translate_one(idx: int) -> None:
             nonlocal completed, api_calls
             text = texts[idx]
-            normalized = text.strip()
+            normalized = _normalize(text)
             cache_key = _kg_key(normalized, source_language, target_language)
 
             async with semaphore:

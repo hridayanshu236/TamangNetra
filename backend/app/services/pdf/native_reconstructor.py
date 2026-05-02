@@ -56,7 +56,11 @@ class NativePdfReconstructor:
                 if block["type"] == 0:
                     for line in block["lines"]:
                         for span in line["spans"]:
-                            orig_text = span["text"].strip()
+                            def _normalize(t: str) -> str:
+                                return re.sub(r'\s+', ' ', t).strip()
+
+                            orig_text_raw = span["text"]
+                            orig_text = _normalize(orig_text_raw)
                             if not orig_text: continue
                             
                             # FORMULA PROTECTION: Skip if it looks like math
