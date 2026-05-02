@@ -49,8 +49,7 @@ async def get_youtube_transcript(v: str = Query(..., description="YouTube Video 
             TranscriptsDisabled,
             NoTranscriptFound,
             VideoUnavailable,
-            RequestBlocked,
-            IPBlocked,
+            YouTubeRequestFailed,
         )
         
         try:
@@ -58,9 +57,9 @@ async def get_youtube_transcript(v: str = Query(..., description="YouTube Video 
         except (VideoUnavailable, TranscriptsDisabled, NoTranscriptFound) as e:
             logger.warning(f"Expected YouTube error for {v}: {e}")
             raise HTTPException(status_code=422, detail=str(e))
-        except (RequestBlocked, IPBlocked) as e:
-            logger.error(f"Proxy blocked for {v}: {e}")
-            raise HTTPException(status_code=503, detail="Proxy blocked by YouTube. Try again later.")
+        except YouTubeRequestFailed as e:
+            logger.error(f"YouTube request failed for {v} (possibly proxy/IP block): {e}")
+            raise HTTPException(status_code=503, detail="YouTube service unavailable or blocked. Try again later.")
         
         rows = []
         for i, entry in enumerate(data):
