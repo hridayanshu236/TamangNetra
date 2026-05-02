@@ -14,6 +14,7 @@ import {
   UploadCloud,
   FileText,
   X,
+  Plus,
 } from "lucide-react";
 import { Navbar } from "@/src/components/tamangnetra/Navbar";
 import { Badge } from "@/src/components/ui/badge";
