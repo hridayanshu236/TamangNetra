@@ -1220,7 +1220,7 @@ export default function Home() {
                               className="inline-block px-4 py-2 rounded-lg bg-black/70 backdrop-blur-md text-white text-lg sm:text-xl md:text-2xl font-medium shadow-lg border border-white/10"
                               style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
                             >
-                              {activeSubtitle.translated}
+                              {activeSubtitle?.translated}
                             </span>
                           </motion.div>
                         )}
