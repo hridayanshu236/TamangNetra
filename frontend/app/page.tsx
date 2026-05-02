@@ -321,62 +321,68 @@ export default function Home() {
       formData.append("file", documentFile);
       formData.append("src_lang", sourceLanguage);
       formData.append("tgt_lang", targetLanguage);
-      formData.append("pii_enabled", "true");
-      formData.append("knowledge_graph_enabled", "true");
 
-      const response = await fetch("/api/process-file", {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/document/process`, {
         method: "POST",
         body: formData,
       });
 
       if (!response.ok) {
-        throw new Error("Document translation failed");
+        throw new Error("Failed to start translation task");
       }
 
-      if (!response.body) {
-        throw new Error("No response body");
-      }
+      const { task_id } = await response.json();
+      console.log(`[Document] Started task: ${task_id}`);
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let partial = "";
-      setDocumentProgressMessage("Translating document...");
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        partial += decoder.decode(value, { stream: true });
-        const lines = partial.split("\n");
-        partial = lines.pop() || "";
-        
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          processLine(line);
+      // Polling function
+      const pollTask = async () => {
+        try {
+          const statusRes = await fetch(`${apiUrl}/document/task/${task_id}`);
+          if (!statusRes.ok) {
+            throw new Error("Failed to poll task status");
+          }
+          
+          const data = await statusRes.json();
+          setDocumentProgress(data.progress);
+          setDocumentProgressMessage(data.message);
+          
+          if (data.status === "success") {
+            const resultData = data.result;
+            const knowledgeEntries = generateKnowledgeEntries(resultData.segments || []);
+            
+            const finalResult: ProcessFileResult = {
+              original: resultData.original || "",
+              translated: resultData.translated || "",
+              segments: resultData.segments || [],
+              knowledgeEntries,
+              fileInfo: resultData.fileInfo || {
+                name: documentFile?.name || "document",
+                type: documentFileType || "pdf",
+                size: documentFile?.size || 0,
+              }
+            };
+            
+            setDocumentResult(finalResult);
+            setDocumentStatus("success");
+            setDocumentProgress(100);
+            return; // Done!
+          } else if (data.status === "error") {
+            throw new Error(data.error || "Background task failed");
+          }
+          
+          // Still processing, poll again in 3 seconds
+          setTimeout(pollTask, 3000);
+        } catch (err) {
+          console.error("Polling error:", err);
+          setDocumentStatus("error");
         }
-      }
+      };
 
-      // Process any remaining data in partial after stream ends
-      if (partial.trim()) {
-        processLine(partial);
-      }
-
-      // AUTO-RECOVERY: If stream ended but we never got the "result" message,
-      // and we had significant progress, try one more time.
-      // Since the backend already cached the results, the retry will be instant.
-      if (documentStatus !== "success" && documentProgress > 50 && !isRetry) {
-        console.log("Stream ended abruptly. Retrying once to fetch cached results...");
-        setDocumentProgressMessage("Finalizing results...");
-        // Call translateDocument again but mark as retry to avoid infinite loops
-        translateDocument(true);
-      }
+      pollTask();
     } catch (error) {
       console.error("Translation failed:", error);
-      if (!isRetry && documentProgress > 50) {
-        translateDocument(true);
-      } else {
-        setDocumentStatus("error");
-      }
+      setDocumentStatus("error");
     }
   };
 
@@ -404,26 +410,27 @@ export default function Home() {
       } else if (data.type === "result") {
         const resultData = data.data;
         
-        // Build knowledge entries
-        const termMap = new Map<string, { translation: string; frequency: number }>();
-        for (const seg of (resultData.segments || [])) {
-          const key = (seg.original || "").trim().toLowerCase();
-          if (!key) continue;
-          const existing = termMap.get(key);
-          if (existing) {
-            existing.frequency += 1;
-          } else {
-            termMap.set(key, { translation: seg.translated || "", frequency: 1 });
-          }
-        }
-        const knowledgeEntries = Array.from(termMap.entries())
-          .map(([source, info]) => ({
-            source,
-            translation: info.translation,
-            frequency: info.frequency,
-          }))
-          .filter(entry => entry.frequency > 1)
-          .sort((a, b) => b.frequency - a.frequency);
+  const generateKnowledgeEntries = (segments: Array<{ original: string; translated: string }>) => {
+    const termMap = new Map<string, { translation: string; frequency: number }>();
+    for (const seg of (segments || [])) {
+      const key = (seg.original || "").trim().toLowerCase();
+      if (!key) continue;
+      const existing = termMap.get(key);
+      if (existing) {
+        existing.frequency += 1;
+      } else {
+        termMap.set(key, { translation: seg.translated || "", frequency: 1 });
+      }
+    }
+    return Array.from(termMap.entries())
+      .map(([source, info]) => ({
+        source,
+        translation: info.translation,
+        frequency: info.frequency,
+      }))
+      .filter(entry => entry.frequency > 1)
+      .sort((a, b) => b.frequency - a.frequency);
+  };
         
         const finalResult: ProcessFileResult = {
           original: resultData.original || "",

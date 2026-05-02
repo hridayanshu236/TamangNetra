@@ -14,63 +14,68 @@ router = APIRouter(prefix="/document", tags=["Document Processing"])
 def get_processor(translation_service: TranslationService = Depends(get_translation_service)) -> DocumentProcessor:
     return get_document_processor(translation_service)
 
+import uuid
+import json
+import asyncio
+
+# In-memory task store (per-server-process)
+# In a production app, use Redis. For a hackathon, this works.
+tasks: Dict[str, Dict[str, Any]] = {}
+
 @router.post("/process")
 async def process_document(
     file: UploadFile = File(...),
     src_lang: str = Form(...),
     tgt_lang: str = Form(...),
     processor: DocumentProcessor = Depends(get_processor)
-) -> StreamingResponse:
+):
     """
-    Process a document (PDF, DOCX, CSV, Excel, Image), extract text, apply OCR if needed,
-    and translate the extracted text. Now streams NDJSON progress.
+    Start a background translation task and return a task ID.
+    Bypasses Vercel's 300s timeout by using polling instead of a long-lived stream.
     """
-    import asyncio
-    import json
-    
     if src_lang == tgt_lang:
         raise HTTPException(status_code=400, detail="Source and target languages must be different")
-        
+
+    task_id = str(uuid.uuid4())
     file_content = await file.read()
     file_name = file.filename
-    file_size = file.size
-    
-    queue = asyncio.Queue()
-    
+    file_size = len(file_content)
+
+    tasks[task_id] = {
+        "status": "loading",
+        "progress": 0,
+        "message": "Extracting text...",
+        "result": None,
+        "error": None
+    }
+
     async def progress_callback(current, total, last_segment=None):
-        msg = {"type": "progress", "current": current, "total": total}
-        if last_segment:
-            msg["segment"] = last_segment
-        await queue.put(msg)
-        
+        progress = round((current / total) * 100) if total > 0 else 0
+        tasks[task_id]["progress"] = progress
+        tasks[task_id]["message"] = f"Translating ({current}/{total})..."
+
     async def run_process():
         try:
-            await queue.put({"type": "status", "message": "Extracting and translating..."})
             result = await processor.process_file(file_content, file_name, file_size, src_lang, tgt_lang, progress_callback)
-            await queue.put({"type": "result", "data": result})
-        except ValueError as e:
-            await queue.put({"type": "error", "message": str(e)})
+            tasks[task_id]["status"] = "success"
+            tasks[task_id]["result"] = result
+            tasks[task_id]["progress"] = 100
         except Exception as e:
-            logger.error(f"Error in process_document: {e}")
-            await queue.put({"type": "error", "message": f"Internal server error: {str(e)}"})
-            
-    async def stream():
-        task = asyncio.create_task(run_process())
-        while True:
-            try:
-                # Wait for a message with a 15-second timeout to send heartbeats
-                msg = await asyncio.wait_for(queue.get(), timeout=15.0)
-                yield json.dumps(msg) + "\n"
-                if msg["type"] in ("result", "error"):
-                    break
-            except asyncio.TimeoutError:
-                # Send a heartbeat to keep the connection alive
-                yield json.dumps({"type": "heartbeat"}) + "\n"
-                
-        # Wait for the background task to complete if it hasn't already
-        await task
-                
-    return StreamingResponse(stream(), media_type="application/x-ndjson")
+            logger.error(f"Error in background task {task_id}: {e}")
+            tasks[task_id]["status"] = "error"
+            tasks[task_id]["error"] = str(e)
+
+    # Start task in background
+    asyncio.create_task(run_process())
+    
+    return {"task_id": task_id}
+
+@router.get("/task/{task_id}")
+async def get_task_status(task_id: str):
+    """Poll for task status."""
+    if task_id not in tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return tasks[task_id]
 
 @router.post("/reconstruct")
 async def reconstruct_document(
