@@ -94,13 +94,13 @@ class TranslationService:
 
                     if response.status_code == 429 or response.status_code >= 500:
                         if attempt < max_retries - 1:
-                            # Exponential backoff with jitter
+                            # Faster backoff for early retries to beat the 300s clock
                             retry_after = response.headers.get("Retry-After")
                             if retry_after and retry_after.isdigit():
-                                wait = float(retry_after)
+                                wait = min(float(retry_after), 10.0) # Cap at 10s
                             else:
-                                base_wait = 2.0 ** attempt
-                                jitter = random.uniform(1.0, 5.0)
+                                base_wait = 1.5 ** attempt # Slightly faster than 2.0
+                                jitter = random.uniform(0.5, 2.0)
                                 wait = base_wait + jitter
                                 
                             logger.warning(
@@ -225,7 +225,8 @@ class TranslationService:
             logger.info(f"Cache misses ({len(uncached_indices)}/{total}): {misses}")
 
         # ── Phase 2: Translate uncached texts concurrently ────────────────────
-        MAX_CONCURRENT = 5
+        # Increased concurrency to 15 to stay within Vercel's 300s timeout
+        MAX_CONCURRENT = 15
         semaphore = asyncio.Semaphore(MAX_CONCURRENT)
         lock = asyncio.Lock()
 

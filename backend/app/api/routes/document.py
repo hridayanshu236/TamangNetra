@@ -54,10 +54,18 @@ async def process_document(
     async def stream():
         task = asyncio.create_task(run_process())
         while True:
-            msg = await queue.get()
-            yield json.dumps(msg) + "\n"
-            if msg["type"] in ("result", "error"):
-                break
+            try:
+                # Wait for a message with a 15-second timeout to send heartbeats
+                msg = await asyncio.wait_for(queue.get(), timeout=15.0)
+                yield json.dumps(msg) + "\n"
+                if msg["type"] in ("result", "error"):
+                    break
+            except asyncio.TimeoutError:
+                # Send a heartbeat to keep the connection alive
+                yield json.dumps({"type": "heartbeat"}) + "\n"
+                
+        # Wait for the background task to complete if it hasn't already
+        await task
                 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
 

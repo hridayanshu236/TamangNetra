@@ -301,14 +301,18 @@ export default function Home() {
     await processSelectedFile(file);
   };
 
-  const translateDocument = async () => {
+  const translateDocument = async (isRetry = false) => {
     if (!documentFile || !documentFileType) {
       return;
     }
 
-    setDocumentStatus("loading");
-    setDocumentProgress(0);
-    setDocumentProgressMessage("Translating document...");
+    if (!isRetry) {
+      setDocumentStatus("loading");
+      setDocumentProgress(0);
+      setDocumentProgressMessage("Translating document...");
+    } else {
+      setDocumentProgressMessage("Finalizing results...");
+    }
     
     try {
       const formData = new FormData();
@@ -354,9 +358,23 @@ export default function Home() {
       if (partial.trim()) {
         processLine(partial);
       }
+
+      // AUTO-RECOVERY: If stream ended but we never got the "result" message,
+      // and we had significant progress, try one more time.
+      // Since the backend already cached the results, the retry will be instant.
+      if (documentStatus !== "success" && documentProgress > 50 && !isRetry) {
+        console.log("Stream ended abruptly. Retrying once to fetch cached results...");
+        setDocumentProgressMessage("Finalizing results...");
+        // Call translateDocument again but mark as retry to avoid infinite loops
+        translateDocument(true);
+      }
     } catch (error) {
       console.error("Translation failed:", error);
-      setDocumentStatus("error");
+      if (!isRetry && documentProgress > 50) {
+        translateDocument(true);
+      } else {
+        setDocumentStatus("error");
+      }
     }
   };
 
@@ -541,20 +559,26 @@ export default function Home() {
       const videoId = extractVideoId(youtubeUrl.trim());
       if (!videoId) throw new Error("Invalid YouTube URL");
 
-      // 1. Fetch Video Page via CodeTabs Proxy (Very reliable for CORS)
-      const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
-      console.log(`[YouTube] Fetching via CodeTabs: ${proxyUrl}`);
+      // Use AllOrigins RAW proxy - much more resilient than JSON proxies
+      const targetUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+      console.log(`[YouTube] Fetching via AllOrigins RAW: ${proxyUrl}`);
       
       const pageResponse = await fetch(proxyUrl);
-      if (!pageResponse.ok) throw new Error("Failed to fetch video page via proxy");
+      if (!pageResponse.ok) throw new Error("Failed to fetch video page");
       const pageHtml = await pageResponse.text();
 
-      // 2. Parse captionTracks
+      // 2. Parse captionTracks from the page source
       const regex = /"captionTracks":\s*(\[.*?\])/;
       const match = pageHtml.match(regex);
-      if (!match) throw new Error("No captions found for this video.");
+      
+      if (!match) {
+        throw new Error("No captions found. This video might have subtitles disabled or be restricted.");
+      }
+
       const captionTracks = JSON.parse(match[1]);
       
+      // Find requested language or English
       const langMapping: Record<string, string> = { 'English': 'en', 'Nepali': 'ne', 'Tamang': 'ne' };
       const targetLangCode = langMapping[sourceLanguage] || 'en';
       
@@ -562,14 +586,15 @@ export default function Home() {
       if (!track) track = captionTracks.find((t: any) => t.languageCode === 'en');
       if (!track) track = captionTracks[0];
 
-      if (!track?.baseUrl) throw new Error("No suitable transcript track found.");
+      if (!track || !track.baseUrl) throw new Error("No suitable caption track found.");
 
-      // 3. Fetch transcript content via CodeTabs Proxy
-      const subProxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(track.baseUrl + '&fmt=json3')}`;
-      const subResponse = await fetch(subProxyUrl);
-      const transcriptData = await subResponse.json();
+      // 3. Fetch the actual transcript JSON
+      const subUrl = track.baseUrl + '&fmt=json3';
+      const subProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(subUrl)}`;
+      const transcriptResponse = await fetch(subProxyUrl);
+      const transcriptData = await transcriptResponse.json();
 
-      // 4. Format segments
+      // 4. Format the segments
       const formattedSubtitles = transcriptData.events
         .filter((e: any) => e.segs && e.segs.length > 0)
         .map((event: any, i: number) => {
@@ -581,6 +606,7 @@ export default function Home() {
             const ms = Math.floor((seconds % 1) * 1000);
             return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
           };
+
           return {
             index: i + 1,
             startTime: formatTime(event.tStartMs / 1000),
@@ -597,7 +623,7 @@ export default function Home() {
       setTranslatedYoutubeSubtitles([]);
       setYoutubeStatus("success");
       
-      console.log(`[YouTube] Successfully fetched ${formattedSubtitles.length} segments via CodeTabs.`);
+      console.log(`[YouTube] Successfully fetched ${formattedSubtitles.length} segments via AllOrigins RAW.`);
     } catch {
       setYoutubeStatus("error");
     }
