@@ -559,40 +559,18 @@ export default function Home() {
       const videoId = extractVideoId(youtubeUrl.trim());
       if (!videoId) throw new Error("Invalid YouTube URL");
 
-      // Use AllOrigins RAW proxy - much more resilient than JSON proxies
-      const targetUrl = `https://www.youtube.com/watch?v=${videoId}`;
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-      console.log(`[YouTube] Fetching via AllOrigins RAW: ${proxyUrl}`);
+      // Use our OWN Internal Backend Proxy (The 100% Reliable Fix)
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const proxyUrl = `${backendUrl}/youtube/transcript?v=${videoId}`;
+      console.log(`[YouTube] Fetching via Internal Backend Proxy: ${proxyUrl}`);
       
-      const pageResponse = await fetch(proxyUrl);
-      if (!pageResponse.ok) throw new Error("Failed to fetch video page");
-      const pageHtml = await pageResponse.text();
-
-      // 2. Parse captionTracks from the page source
-      const regex = /"captionTracks":\s*(\[.*?\])/;
-      const match = pageHtml.match(regex);
-      
-      if (!match) {
-        throw new Error("No captions found. This video might have subtitles disabled or be restricted.");
+      const response = await fetch(proxyUrl);
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ detail: "Failed to fetch transcript" }));
+        throw new Error(errData.detail || "Failed to fetch transcript");
       }
-
-      const captionTracks = JSON.parse(match[1]);
       
-      // Find requested language or English
-      const langMapping: Record<string, string> = { 'English': 'en', 'Nepali': 'ne', 'Tamang': 'ne' };
-      const targetLangCode = langMapping[sourceLanguage] || 'en';
-      
-      let track = captionTracks.find((t: any) => t.languageCode === targetLangCode);
-      if (!track) track = captionTracks.find((t: any) => t.languageCode === 'en');
-      if (!track) track = captionTracks[0];
-
-      if (!track || !track.baseUrl) throw new Error("No suitable caption track found.");
-
-      // 3. Fetch the actual transcript JSON
-      const subUrl = track.baseUrl + '&fmt=json3';
-      const subProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(subUrl)}`;
-      const transcriptResponse = await fetch(subProxyUrl);
-      const transcriptData = await transcriptResponse.json();
+      const transcriptData = await response.json();
 
       // 4. Format the segments
       const formattedSubtitles = transcriptData.events
@@ -623,7 +601,7 @@ export default function Home() {
       setTranslatedYoutubeSubtitles([]);
       setYoutubeStatus("success");
       
-      console.log(`[YouTube] Successfully fetched ${formattedSubtitles.length} segments via AllOrigins RAW.`);
+      console.log(`[YouTube] Successfully fetched ${formattedSubtitles.length} segments via Internal Proxy.`);
     } catch {
       setYoutubeStatus("error");
     }
