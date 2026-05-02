@@ -24,28 +24,36 @@ _knowledge_graph: dict[str, str] = {}
 def _load_knowledge_graph() -> None:
     """Load the persisted Knowledge Graph from disk into memory."""
     global _knowledge_graph
-    if _KG_PATH.exists():
-        try:
-            with open(_KG_PATH, "r", encoding="utf-8") as f:
-                _knowledge_graph = json.load(f)
-            logger.info(
-                f"Knowledge Graph loaded from disk: {len(_knowledge_graph)} cached entries."
-            )
-        except Exception as e:
-            logger.warning(f"Could not load Knowledge Graph cache: {e}. Starting fresh.")
-            _knowledge_graph = {}
-    else:
-        logger.info("No Knowledge Graph cache found on disk. Starting fresh.")
+    # Try multiple paths for reliability in different environments
+    paths = [_KG_PATH, Path("/tmp/knowledge_graph_cache.json")]
+    
+    for p in paths:
+        if p.exists():
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    _knowledge_graph.update(data)
+                logger.info(
+                    f"Knowledge Graph loaded from {p}: {len(_knowledge_graph)} cached entries."
+                )
+                return
+            except Exception as e:
+                logger.warning(f"Could not load Knowledge Graph from {p}: {e}")
+    
+    logger.info("No Knowledge Graph cache found on disk. Starting fresh.")
 
 
 def _save_knowledge_graph() -> None:
     """Persist the Knowledge Graph to disk (thread-safe)."""
     with _kg_lock:
-        try:
-            with open(_KG_PATH, "w", encoding="utf-8") as f:
-                json.dump(_knowledge_graph, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.warning(f"Could not save Knowledge Graph to disk: {e}")
+        # Save to both locations just in case
+        paths = [_KG_PATH, Path("/tmp/knowledge_graph_cache.json")]
+        for p in paths:
+            try:
+                with open(p, "w", encoding="utf-8") as f:
+                    json.dump(_knowledge_graph, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.warning(f"Could not save Knowledge Graph to {p}: {e}")
 
 
 def _kg_key(text: str, src: str, tgt: str) -> str:
@@ -225,8 +233,8 @@ class TranslationService:
             logger.info(f"Cache misses ({len(uncached_indices)}/{total}): {misses}")
 
         # ── Phase 2: Translate uncached texts concurrently ────────────────────
-        # Increased concurrency to 15 to stay within Vercel's 300s timeout
-        MAX_CONCURRENT = 15
+        # Reduced concurrency to 3 to avoid 429 rate limits which cause timeouts
+        MAX_CONCURRENT = 3
         semaphore = asyncio.Semaphore(MAX_CONCURRENT)
         lock = asyncio.Lock()
 
@@ -238,6 +246,15 @@ class TranslationService:
 
             async with semaphore:
                 try:
+                    # Check cache again inside semaphore just in case another task filled it
+                    async with lock:
+                        if cache_key in _knowledge_graph:
+                            results[idx] = _knowledge_graph[cache_key]
+                            completed += 1
+                            if progress_callback:
+                                await progress_callback(completed, total)
+                            return
+
                     request = TranslationRequest(
                         text=text,
                         source_language=source_language,
@@ -261,6 +278,7 @@ class TranslationService:
                     await progress_callback(completed, total)
 
         if uncached_indices:
+            # Sort by length to process shorter ones first? No, let's just run.
             await asyncio.gather(*(translate_one(i) for i in uncached_indices))
 
         logger.info(
