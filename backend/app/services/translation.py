@@ -170,14 +170,22 @@ class TranslationService:
             s = t.strip()
             if not s:
                 return False
-            if re.fullmatch(r"[\d,.\s\-+%$€£¥₹₨]+", s):
+            # Basic numbers, dates, codes
+            if re.fullmatch(r"[\d,.\s\-+%$€£¥₹₨]+", s): return False
+            if len(s) <= 1: return False
+            if re.fullmatch(r"\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4}", s): return False
+            if re.fullmatch(r"[A-Z0-9]{1,6}\.?", s): return False
+            
+            # Formula Detection: Look for math operators and symbols
+            math_operators = r'[±×÷√∞ΣΔΠ≈≠≤≥∑∏∫∂∇∀∃∈∉∋⊆⊇∪∩∧∨¬⇒⇔↔+\-*/=<>^|_]'
+            if re.search(math_operators, s) and any(c.isdigit() for c in s):
                 return False
-            if len(s) <= 1:
+                
+            # Heuristic: If it has very few letters relative to its length, it's likely a technical string
+            letters = len(re.findall(r'[a-zA-Z]', s))
+            if len(s) > 3 and letters / len(s) < 0.3:
                 return False
-            if re.fullmatch(r"\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4}", s):
-                return False
-            if re.fullmatch(r"[A-Z0-9]{1,6}\.?", s):
-                return False
+
             return True
 
         total = len(texts)
