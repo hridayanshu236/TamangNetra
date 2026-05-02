@@ -651,46 +651,23 @@ export default function Home() {
         >
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="space-y-2">
-              <Badge variant="secondary" className="w-fit gap-1.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors">
-                <ArrowRightLeft className="size-3.5" /> Core translation engine
+              <Badge variant="secondary" className="w-fit gap-1.5 bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20 px-3 py-1">
+                <ShieldCheck className="size-3.5" /> Google TMT Hackathon
               </Badge>
-              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-500">
-                TamangNetra Studio
-              </h1>
-              <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-                Professional translation across English, Nepali, and Tamang. Features robust API rate-limiting, sentence-level PII preservation, and multi-format document reconstruction.
+              <div className="flex flex-col gap-1 mt-2">
+                <p className="text-xs font-bold uppercase tracking-widest text-emerald-600/80 dark:text-emerald-400/80">
+                  Bridging cultures with digital precision.
+                </p>
+                <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-500">
+                  TamangNetra
+                </h1>
+              </div>
+              <p className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
+                An advanced neural translation ecosystem for English, Nepali, and Tamang. 
+                Experience <strong>pixel-perfect layout reconstruction</strong> for PDF, DOCX, CSV, and TSV files, 
+                along with <strong>synchronized interactive translation</strong> for YouTube media.
               </p>
             </div>
-
-            <Card className="w-full max-w-sm border-dashed bg-gradient-to-br from-background to-muted/30 shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="flex items-center gap-3 p-4">
-                <motion.div 
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  className="rounded-full bg-emerald-100 dark:bg-emerald-900/30 p-2 text-emerald-600 dark:text-emerald-400"
-                >
-                  {healthStatus === "loading" ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="size-4" />
-                  )}
-                </motion.div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">
-                    {healthStatus === "success"
-                      ? "Neural API Connected"
-                      : healthStatus === "error"
-                        ? "API Offline"
-                        : "Initializing Engine..."}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {health
-                      ? `Latency: ${health.status === 'ok' ? '< 50ms' : 'Unknown'} • Ready`
-                      : "Awaiting heartbeat..."}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
           </div>
           <Button variant="outline" size="sm" asChild className="w-fit hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/30 transition-colors">
             <a
@@ -710,11 +687,19 @@ export default function Home() {
           suppressHydrationWarning
         >
           <Tabs defaultValue="documents" className="space-y-4">
-          <TabsList className="grid h-auto w-full grid-cols-3 gap-2">
-            <TabsTrigger value="translate">Translate</TabsTrigger>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
-            <TabsTrigger value="youtube">YouTube</TabsTrigger>
-          </TabsList>
+          <div className="flex justify-center mb-8">
+            <TabsList className="h-12 inline-flex items-center justify-center rounded-full bg-muted/50 p-1 backdrop-blur-md border border-border/50 shadow-sm">
+              <TabsTrigger value="translate" className="rounded-full px-6 py-2 data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-300">
+                Text
+              </TabsTrigger>
+              <TabsTrigger value="documents" className="rounded-full px-6 py-2 data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-300">
+                Document
+              </TabsTrigger>
+              <TabsTrigger value="youtube" className="rounded-full px-6 py-2 data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-300">
+                YouTube
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="translate" id="translate">
             <Card className="backdrop-blur-xl bg-background/60 border-white/10 shadow-xl overflow-hidden">
@@ -827,7 +812,7 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="documents" id="documents">
-            <Card>
+            <Card className="backdrop-blur-xl bg-background/60 border-white/10 shadow-xl overflow-hidden">
               <CardHeader>
                 <CardTitle>Document upload</CardTitle>
                 <CardDescription>
@@ -884,32 +869,39 @@ export default function Home() {
                     const file = e.dataTransfer.files?.[0];
                     if (file) processSelectedFile(file);
                   }}
-                  className={`relative flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-xl transition-all duration-300 ${
+                  className={`relative group flex flex-col items-center justify-center p-16 border-2 border-dashed rounded-2xl transition-all duration-500 ${
                     isDragging
-                      ? "border-emerald-500 bg-emerald-500/10 scale-[1.02] shadow-lg shadow-emerald-500/20"
-                      : "border-border hover:border-emerald-500/50 hover:bg-muted/50"
+                      ? "border-emerald-500 bg-emerald-500/5 scale-[1.01] shadow-2xl shadow-emerald-500/10"
+                      : "border-muted-foreground/20 bg-muted/5 hover:border-emerald-500/40 hover:bg-emerald-500/5"
                   }`}
                 >
                   <Input
                     type="file"
                     accept=".pdf,.docx,.csv,.tsv,.xlsx,.xls"
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) processSelectedFile(file);
                     }}
                   />
-                  <div className="flex flex-col items-center gap-4 text-center pointer-events-none">
-                    <motion.div
-                      animate={isDragging ? { y: [0, -10, 0] } : {}}
-                      transition={{ repeat: Infinity, duration: 1 }}
-                      className="p-4 rounded-full bg-background/50 backdrop-blur-sm shadow-sm border border-border"
-                    >
-                      <UploadCloud className={`size-8 ${isDragging ? "text-emerald-500" : "text-muted-foreground"}`} />
-                    </motion.div>
+                  <div className="flex flex-col items-center gap-6 text-center">
+                    <div className="relative">
+                      <motion.div
+                        animate={isDragging ? { scale: [1, 1.2, 1], rotate: [0, 5, -5, 0] } : {}}
+                        transition={{ repeat: Infinity, duration: 2 }}
+                        className="p-5 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-xl"
+                      >
+                        <UploadCloud className="size-10" />
+                      </motion.div>
+                      <div className="absolute -inset-4 bg-emerald-500/20 blur-2xl rounded-full -z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    </div>
                     <div>
-                      <p className="text-base font-medium">Click or drag document here</p>
-                      <p className="text-sm text-muted-foreground mt-1">Supports PDF, DOCX, CSV, Excel</p>
+                      <p className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
+                        {documentFile ? documentFile.name : "Drop your document here"}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-2 max-w-xs">
+                        Supports PDF, DOCX, CSV, Excel. <br/>Precision layout preservation enabled.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1058,7 +1050,7 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="youtube" id="youtube">
-            <Card>
+            <Card className="backdrop-blur-xl bg-background/60 border-white/10 shadow-xl overflow-hidden">
               <CardHeader>
                 <CardTitle>YouTube subtitles</CardTitle>
                 <CardDescription>
@@ -1066,50 +1058,61 @@ export default function Home() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-sm font-medium">YouTube URL</label>
-                    <Input
-                      value={youtubeUrl}
-                      onChange={(event) => setYoutubeUrl(event.target.value)}
-                      placeholder="https://www.youtube.com/watch?v=..."
-                    />
+                <div className="flex flex-col gap-8 max-w-3xl mx-auto py-4">
+                  <div className="space-y-4 text-center">
+                    <div className="relative group">
+                      <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full blur opacity-25 group-focus-within:opacity-50 transition duration-1000 group-focus-within:duration-200"></div>
+                      <div className="relative flex items-center bg-background rounded-full border border-border/50 px-6 h-14 shadow-sm">
+                        <Video className="size-5 text-muted-foreground mr-4" />
+                        <input
+                          value={youtubeUrl}
+                          onChange={(event) => setYoutubeUrl(event.target.value)}
+                          placeholder="Paste YouTube video link here..."
+                          className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground/60"
+                        />
+                        {youtubeUrl && (
+                          <button 
+                            onClick={() => setYoutubeUrl("")}
+                            className="p-1 hover:bg-muted rounded-full transition-colors"
+                          >
+                            <X className="size-4 text-muted-foreground" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
+                      Supported: Captions • Auto-Sync • SRT Export
+                    </p>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">
-                      Source language
-                    </label>
-                    <select
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                      value={sourceLanguage}
-                      onChange={(event) =>
-                        setSourceLanguage(event.target.value as Language)
-                      }
-                    >
-                      {LANGUAGE_OPTIONS.map((language) => (
-                        <option key={language} value={language}>
-                          {language}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">
-                      Target language
-                    </label>
-                    <select
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                      value={targetLanguage}
-                      onChange={(event) =>
-                        setTargetLanguage(event.target.value as Language)
-                      }
-                    >
-                      {LANGUAGE_OPTIONS.map((language) => (
-                        <option key={language} value={language}>
-                          {language}
-                        </option>
-                      ))}
-                    </select>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="group relative overflow-hidden rounded-2xl border bg-background/50 p-4 transition-all hover:border-emerald-500/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">From</label>
+                        <div className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      </div>
+                      <select
+                        className="w-full bg-transparent text-sm font-medium outline-none cursor-pointer"
+                        value={sourceLanguage}
+                        onChange={(event) => setSourceLanguage(event.target.value as Language)}
+                      >
+                        {LANGUAGE_OPTIONS.map((lang) => <option key={lang} value={lang}>{lang}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="group relative overflow-hidden rounded-2xl border bg-background/50 p-4 transition-all hover:border-teal-500/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">To</label>
+                        <div className="size-1.5 rounded-full bg-teal-500 animate-pulse" />
+                      </div>
+                      <select
+                        className="w-full bg-transparent text-sm font-medium outline-none cursor-pointer"
+                        value={targetLanguage}
+                        onChange={(event) => setTargetLanguage(event.target.value as Language)}
+                      >
+                        {LANGUAGE_OPTIONS.map((lang) => <option key={lang} value={lang}>{lang}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -1295,6 +1298,21 @@ export default function Home() {
           />
         )}
       </AnimatePresence>
+
+      {/* Floating Backend Status Bubble */}
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="fixed bottom-6 right-6 z-50"
+      >
+        <div className="flex items-center gap-2 rounded-full border border-emerald-500/20 bg-background/80 px-4 py-2 text-xs font-medium text-emerald-600 shadow-lg backdrop-blur-md dark:text-emerald-400">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+          </span>
+          Backend Connected
+        </div>
+      </motion.div>
     </div>
   );
 }

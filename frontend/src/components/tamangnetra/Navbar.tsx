@@ -13,11 +13,7 @@ interface NavItem {
   href: string;
 }
 
-const navItems: NavItem[] = [
-  { label: "Translate", href: "#translate" },
-  { label: "Documents", href: "#documents" },
-  { label: "YouTube", href: "#youtube" },
-];
+const navItems: NavItem[] = [];
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -153,18 +149,6 @@ export function Navbar() {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-9 text-muted-foreground hover:text-emerald-600 transition-colors"
-            onClick={() => restartTour()}
-            aria-label="Help / Restart tour"
-            title="Restart Onboarding Tour"
-          >
-            <HelpCircle className="size-4" />
-          </Button>
-
-          <NotificationPanel />
           <ThemeToggle />
 
           <Button
