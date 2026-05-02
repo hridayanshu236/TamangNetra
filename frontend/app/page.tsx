@@ -346,73 +346,73 @@ export default function Home() {
         
         for (const line of lines) {
           if (!line.trim()) continue;
-          
-          try {
-            const data = JSON.parse(line);
-            
-            if (data.type === "status") {
-              setDocumentProgressMessage(data.message);
-            } else if (data.type === "progress") {
-              const progress = Math.round((data.current / data.total) * 100);
-              setDocumentProgress(progress);
-              setDocumentProgressMessage(`Translating sentences (${data.current}/${data.total})...`);
-            } else if (data.type === "result") {
-              const resultData = data.data;
-              
-              // Build knowledge entries
-              const termMap = new Map<string, { translation: string; frequency: number }>();
-              for (const seg of (resultData.segments || [])) {
-                const key = seg.original.trim().toLowerCase();
-                if (!key) continue;
-                const existing = termMap.get(key);
-                if (existing) {
-                  existing.frequency += 1;
-                } else {
-                  termMap.set(key, { translation: seg.translated, frequency: 1 });
-                }
-              }
-              const knowledgeEntries = Array.from(termMap.entries())
-                .map(([source, info]) => ({
-                  source,
-                  translation: info.translation,
-                  frequency: info.frequency,
-                }))
-                .filter(entry => entry.frequency > 1)
-                .sort((a, b) => b.frequency - a.frequency);
-              
-              const finalResult: ProcessFileResult = {
-                original: resultData.original || "",
-                translated: resultData.translated || "",
-                segments: resultData.segments || [],
-                knowledgeEntries,
-                fileInfo: resultData.fileInfo || {
-                  name: documentFile!.name,
-                  type: documentFileType || "pdf",
-                  size: documentFile!.size,
-                }
-              };
-              setDocumentResult(finalResult);
-              setDocumentStatus("success");
-            } else if (data.type === "error") {
-              throw new Error(data.message);
-            }
-          } catch (e) {
-            console.error("Failed to parse stream chunk or stream error", e);
-            if (e instanceof Error) {
-              setDocumentProgressMessage(e.message);
-            }
-            throw e; // Rethrow to be caught by the outer catch
-          }
+          processLine(line);
         }
       }
-      
-      // If we exit the loop without success or error, it might have ended abruptly
-      if (documentStatus === "loading") {
-        // Just in case it never received "result"
+
+      // Process any remaining data in partial after stream ends
+      if (partial.trim()) {
+        processLine(partial);
       }
     } catch (error) {
       console.error("Translation failed:", error);
       setDocumentStatus("error");
+    }
+  };
+
+  /** Helper to process a single NDJSON line from the stream */
+  const processLine = (line: string) => {
+    try {
+      const data = JSON.parse(line);
+      
+      if (data.type === "status") {
+        setDocumentProgressMessage(data.message);
+      } else if (data.type === "progress") {
+        const progress = Math.round((data.current / data.total) * 100);
+        setDocumentProgress(progress);
+        setDocumentProgressMessage(`Translating sentences (${data.current}/${data.total})...`);
+      } else if (data.type === "result") {
+        const resultData = data.data;
+        
+        // Build knowledge entries
+        const termMap = new Map<string, { translation: string; frequency: number }>();
+        for (const seg of (resultData.segments || [])) {
+          const key = (seg.original || "").trim().toLowerCase();
+          if (!key) continue;
+          const existing = termMap.get(key);
+          if (existing) {
+            existing.frequency += 1;
+          } else {
+            termMap.set(key, { translation: seg.translated || "", frequency: 1 });
+          }
+        }
+        const knowledgeEntries = Array.from(termMap.entries())
+          .map(([source, info]) => ({
+            source,
+            translation: info.translation,
+            frequency: info.frequency,
+          }))
+          .filter(entry => entry.frequency > 1)
+          .sort((a, b) => b.frequency - a.frequency);
+        
+        const finalResult: ProcessFileResult = {
+          original: resultData.original || "",
+          translated: resultData.translated || "",
+          segments: resultData.segments || [],
+          knowledgeEntries,
+          fileInfo: resultData.fileInfo || {
+            name: documentFile?.name || "document",
+            type: documentFileType || "pdf",
+            size: documentFile?.size || 0,
+          }
+        };
+        setDocumentResult(finalResult);
+        setDocumentStatus("success");
+      } else if (data.type === "error") {
+        throw new Error(data.message);
+      }
+    } catch (e) {
+      console.error("Failed to parse stream line:", line, e);
     }
   };
 
