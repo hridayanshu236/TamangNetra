@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 import logging
 
 from app.core.config import get_settings
-from app.api.routes import translation, ocr, pii, health, document
+from app.api.routes import translation, ocr, pii, health, document, youtube
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -62,6 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(ocr.router)
     app.include_router(pii.router)
     app.include_router(document.router)
+    app.include_router(youtube.router)
     
     # Exception handlers can be added here
     

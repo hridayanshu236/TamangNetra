@@ -286,6 +286,29 @@ export const apiClient = {
       handleError(error);
     }
   },
+  
+  /**
+   * Fetch YouTube subtitles from the backend
+   */
+  async fetchYoutubeSubtitles(url: string, lang: string = 'en'): Promise<{
+    subtitles: any[];
+    videoId: string;
+    title: string;
+    isDemo: boolean;
+    error?: string;
+  }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/youtube/fetch?url=${encodeURIComponent(url)}&lang=${encodeURIComponent(lang)}`);
+      
+      if (!response.ok) {
+        handleError(response);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      handleError(error);
+    }
+  },
 };
 
 export default apiClient;

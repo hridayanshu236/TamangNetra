@@ -521,27 +521,15 @@ export default function Home() {
     setTranslatedYoutubeSubtitles([]);
 
     try {
-      const response = await fetch("/api/youtube", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          url: youtubeUrl.trim(),
-          src_lang: sourceLanguage,
-        }),
-      });
-      const payload = (await response.json()) as {
-        subtitles?: SubtitleRow[];
-        title?: string;
-        videoId?: string;
-        isDemo?: boolean;
-        error?: string;
+      // Map display name to ISO code
+      const langMapping: Record<string, string> = {
+        'English': 'en',
+        'Nepali': 'ne',
+        'Tamang': 'ne',
       };
+      const langCode = langMapping[sourceLanguage] || 'en';
 
-      if (!response.ok) {
-        throw new Error(payload.error || "YouTube fetch failed");
-      }
+      const payload = await apiClient.fetchYoutubeSubtitles(youtubeUrl.trim(), langCode);
 
       setYoutubeTitle(payload.title || "");
       setYoutubeVideoId(payload.videoId || "");
