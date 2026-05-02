@@ -24,11 +24,11 @@ interface YouTubeResponse {
  */
 function extractVideoId(url: string): string | null {
   const patterns = [
-    /(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
-    /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
-    /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
-    /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
-    /(?:youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
+    /[?&]v=([a-zA-Z0-9_-]{11})/,
+    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+    /embed\/([a-zA-Z0-9_-]{11})/,
+    /shorts\/([a-zA-Z0-9_-]{11})/,
+    /v\/([a-zA-Z0-9_-]{11})/,
   ];
 
   for (const pattern of patterns) {
@@ -113,13 +113,12 @@ async function fetchYouTubeCaptionsFull(
   // Step 3: As a last resort, try fetching any available transcript.
   if (!transcriptItems || transcriptItems.length === 0) {
     try {
+      console.log(`Attempting final fallback fetch for videoId: ${videoId}`);
       transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
       console.log('Successfully fetched first available transcript as a fallback.');
     } catch (err) {
-      console.error(
-        'Could not fetch any transcript, falling back to demo.',
-        err instanceof Error ? err.message : 'Unknown'
-      );
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.error(`CRITICAL: Could not fetch any transcript for ${videoId}. Error: ${errMsg}`);
     }
   }
 
@@ -149,18 +148,17 @@ async function fetchYouTubeCaptionsFull(
 }
 
 /**
- * POST /api/youtube
- *
- * Request body: { url: string, src_lang?: string }
- *
- * Response:
- * {
- *   subtitles: Array<{ index, startTime, endTime, text }>,
- *   videoId: string,
- *   title: string,
- *   isDemo: boolean
- * }
+ * Map display language names to ISO codes for YouTube.
  */
+function mapLanguageToCode(lang: string): string {
+  const mapping: Record<string, string> = {
+    'English': 'en',
+    'Nepali': 'ne',
+    'Tamang': 'ne', // Tamang usually doesn't have its own track, try Nepali as fallback
+  };
+  return mapping[lang] || 'en';
+}
+
 export async function POST(request: NextRequest) {
   try {
     let body: { url?: string; src_lang?: string };
@@ -174,6 +172,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { url, src_lang } = body;
+    const langCode = src_lang ? mapLanguageToCode(src_lang) : 'en';
 
     if (!url || typeof url !== 'string' || !url.trim()) {
       return NextResponse.json(
@@ -190,7 +189,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await fetchYouTubeCaptionsFull(videoId, src_lang);
+    console.log(`Fetching YouTube subtitles for videoId: ${videoId} in lang: ${langCode}`);
+    const result = await fetchYouTubeCaptionsFull(videoId, langCode);
 
     const response: YouTubeResponse = {
       subtitles: result.subtitles,
