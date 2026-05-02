@@ -589,40 +589,7 @@ export default function Home() {
       
       console.log(`[YouTube] Successfully fetched ${formattedSubtitles.length} segments via No-CORS API.`);
 
-      // 5. Format the segments
-      const formattedSubtitles = transcriptData.events
-        .filter((e: any) => e.segs && e.segs.length > 0)
-        .map((event: any, i: number) => {
-          const text = event.segs.map((s: any) => s.utf8).join("").trim();
-          const start = event.tStartMs / 1000;
-          const duration = event.dDurationMs / 1000;
-          
-          const formatTime = (seconds: number) => {
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const s = Math.floor(seconds % 60);
-            const ms = Math.floor((seconds % 1) * 1000);
-            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
-          };
-
-          return {
-            index: i + 1,
-            startTime: formatTime(start),
-            endTime: formatTime(start + duration),
-            text
-          };
-        })
-        .filter((s: any) => s.text.length > 0);
-
-      // 6. Update State
-      setYoutubeTitle("YouTube Video");
-      setYoutubeVideoId(videoId);
-      setYoutubeIsDemo(false);
-      setYoutubeSubtitles(formattedSubtitles);
-      setTranslatedYoutubeSubtitles([]);
-      setYoutubeStatus("success");
-      
-      console.log(`[YouTube] Successfully fetched ${formattedSubtitles.length} segments via Browser + Proxy.`);
+      console.log(`[YouTube] Successfully fetched ${formattedSubtitles.length} segments via No-CORS API.`);
     } catch {
       setYoutubeStatus("error");
     }
