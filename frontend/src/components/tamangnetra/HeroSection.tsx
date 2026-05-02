@@ -89,7 +89,7 @@ export function HeroSection() {
     return () => clearInterval(timer);
   }, []);
 
-  const typingScripts = ['नमस्ते', 'Hello', 'लास्सो', 'Welcome','फ्याफुल्ला', 'स्वागतम्',  'थुजेछे'];
+  const typingScripts = ['नमस्ते', 'Hello', 'लास्सो', 'Welcome', 'फ्याफुल्ला', 'स्वागतम्', 'थुजेछे'];
   useEffect(() => {
     const timer = setInterval(() => {
       setTypingScriptIndex((prev) => (prev + 1) % typingScripts.length);
