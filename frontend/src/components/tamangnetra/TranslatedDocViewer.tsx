@@ -113,9 +113,9 @@ function SpreadsheetViewer({ blob, fileType }: { blob: Blob; fileType: DocViewer
           const firstSheetName = workbook.SheetNames[0];
           if (firstSheetName) {
             const worksheet = workbook.Sheets[firstSheetName];
-            const jsonData = XLSX.utils.sheet_to_json<TableRow>(worksheet!, { header: 1 });
+            const jsonData = XLSX.utils.sheet_to_json<any[]>(worksheet!, { header: 1 });
             if (jsonData.length > 0) {
-              const [headerRow, ...dataRows] = jsonData as any[][];
+              const [headerRow, ...dataRows] = jsonData as unknown as any[][];
               setHeaders(headerRow.map(String));
               setRows(dataRows.map(row => {
                 const obj: TableRow = {};
