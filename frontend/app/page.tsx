@@ -990,7 +990,7 @@ export default function Home() {
 
                 <div className="flex flex-wrap gap-3">
                   <Button
-                    onClick={translateDocument}
+                    onClick={() => translateDocument()}
                     disabled={documentStatus === "loading" || !documentFileType}
                     className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-500/20"
                   >
