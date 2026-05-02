@@ -23,7 +23,7 @@ function normalizeLanguage(lang: string): string | null {
   return LANGUAGE_ALIASES[lang.toLowerCase().trim()] || null;
 }
 
-const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB to comply with hackathon rules
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 // Supported file extensions
 const SUPPORTED_EXTENSIONS = new Set(['pdf', 'docx', 'csv', 'tsv', 'xlsx', 'xls', 'png', 'jpg', 'jpeg']);
@@ -99,25 +99,30 @@ export async function POST(request: NextRequest) {
     const knowledgeGraphEnabledStr = formData.get('knowledge_graph_enabled') as string | null;
 
     if (!file) {
+      console.error('ProcessFile: Missing file');
       return NextResponse.json({ error: 'File is required' }, { status: 400 });
     }
 
     if (!srcLang || !tgtLang) {
+      console.error('ProcessFile: Missing languages', { srcLang, tgtLang });
       return NextResponse.json({ error: 'src_lang and tgt_lang are required' }, { status: 400 });
     }
 
-    srcLang = normalizeLanguage(srcLang);
-    tgtLang = normalizeLanguage(tgtLang);
+    const normSrc = normalizeLanguage(srcLang);
+    const normTgt = normalizeLanguage(tgtLang);
 
-    if (!srcLang || !tgtLang) {
+    if (!normSrc || !normTgt) {
+      console.error('ProcessFile: Unsupported languages', { srcLang, tgtLang, normSrc, normTgt });
       return NextResponse.json({ error: 'Unsupported language' }, { status: 400 });
     }
 
-    if (srcLang === tgtLang) {
+    if (normSrc === normTgt) {
+      console.error('ProcessFile: Same languages', { normSrc, normTgt });
       return NextResponse.json({ error: 'src_lang and tgt_lang must be different' }, { status: 400 });
     }
 
     if (file.size > MAX_FILE_SIZE) {
+      console.error('ProcessFile: File too large', { size: file.size, limit: MAX_FILE_SIZE });
       return NextResponse.json({ error: 'File size exceeds limit' }, { status: 400 });
     }
 
@@ -132,8 +137,8 @@ export async function POST(request: NextRequest) {
     // Prepare FormData for the backend
     const backendFormData = new FormData();
     backendFormData.append('file', file);
-    backendFormData.append('src_lang', srcLang);
-    backendFormData.append('tgt_lang', tgtLang);
+    backendFormData.append('src_lang', normSrc);
+    backendFormData.append('tgt_lang', normTgt);
 
     // Call the new backend endpoint which now streams NDJSON
     const backendResponse = await fetch(`${BACKEND_API_URL}/document/process`, {

@@ -55,6 +55,7 @@ type ProcessFileResult = {
   original: string;
   translated: string;
   segments: ProcessFileSegment[];
+  knowledgeEntries?: Array<{ source: string; translation: string; frequency: number }>;
   fileInfo: {
     name: string;
     type: DocumentFileType;
@@ -92,14 +93,12 @@ function StatusPill({
 
 function getDocumentType(fileName: string): DocumentFileType | null {
   const extension = fileName.split(".").pop()?.toLowerCase();
-  if (
-    extension === "pdf" ||
-    extension === "docx" ||
-    extension === "csv" ||
-    extension === "tsv"
-  ) {
-    return extension;
-  }
+  const docs: DocumentFileType[] = ["pdf", "docx", "csv", "tsv", "xlsx", "xls"];
+  if (docs.includes(extension as any)) return extension as DocumentFileType;
+  
+  const images = ["jpg", "jpeg", "png"];
+  if (images.includes(extension as any)) return "image";
+  
   return null;
 }
 
@@ -366,9 +365,9 @@ export default function Home() {
                 segments: resultData.segments || [],
                 knowledgeEntries,
                 fileInfo: resultData.fileInfo || {
-                  name: documentFile.name,
-                  type: documentFileType,
-                  size: documentFile.size,
+                  name: documentFile!.name,
+                  type: documentFileType || "pdf",
+                  size: documentFile!.size,
                 }
               });
               setDocumentStatus("success");
