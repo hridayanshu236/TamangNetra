@@ -538,102 +538,56 @@ export default function Home() {
     setTranslatedYoutubeSubtitles([]);
 
     try {
-      // 1. Extract Video ID
       const videoId = extractVideoId(youtubeUrl.trim());
       if (!videoId) throw new Error("Invalid YouTube URL");
 
-      // 2. Fetch Video Page to find caption tracks via Triple-Proxy Engine
-      let pageHtml = "";
-      const proxies = [
-        (url: string) => `https://shcors.vercel.app/proxy?url=${encodeURIComponent(url)}`,
-        (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-        (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`
-      ];
-
-      const targetUrl = `https://www.youtube.com/watch?v=${videoId}`;
-      let success = false;
-
-      for (const getProxyUrl of proxies) {
-        try {
-          console.log(`[YouTube] Trying proxy: ${getProxyUrl(targetUrl)}`);
-          const response = await fetch(getProxyUrl(targetUrl));
-          if (!response.ok) continue;
-          
-          const result = await response.json();
-          // allorigins returns .contents, shcors returns .data or body
-          pageHtml = result.contents || result.data || (typeof result === 'string' ? result : JSON.stringify(result));
-          
-          if (pageHtml && pageHtml.includes("captionTracks")) {
-            success = true;
-            break;
-          }
-        } catch (e) {
-          console.warn(`[YouTube] Proxy failed, trying next...`);
-        }
-      }
-
-      if (!success) {
-        // Final fallback: try raw fetch (might work if user has a browser extension)
-        try {
-          const rawResp = await fetch(targetUrl);
-          pageHtml = await rawResp.text();
-        } catch (e) {
-          throw new Error("All fetching methods failed. YouTube might be blocking all requests. Please try again in a few minutes.");
-        }
-      }
-
-      // 3. Parse captionTracks from the page source
-      const regex = /"captionTracks":\s*(\[.*?\])/;
-      const match = pageHtml.match(regex);
+      // Use a specialized No-CORS YouTube Transcript API
+      // This is much more reliable than general proxies
+      const transcriptUrl = `https://yt.lemnoslife.com/no-cors/transcript?v=${videoId}&lang=${sourceLanguage === 'English' ? 'en' : 'ne'}`;
+      console.log(`[YouTube] Fetching via No-CORS API: ${transcriptUrl}`);
       
-      if (!match) {
-        throw new Error("Could not find any captions for this video. It might be restricted or have no subtitles.");
-      }
-
-      const captionTracks = JSON.parse(match[1]);
+      const response = await fetch(transcriptUrl);
+      if (!response.ok) throw new Error("Failed to fetch transcript from No-CORS API");
       
-      // Find requested language or English
-      const langMapping: Record<string, string> = {
-        'English': 'en',
-        'Nepali': 'ne',
-        'Tamang': 'ne',
-      };
-      const targetLangCode = langMapping[sourceLanguage] || 'en';
+      const data = await response.json();
       
-      let track = captionTracks.find((t: any) => t.languageCode === targetLangCode);
-      if (!track) track = captionTracks.find((t: any) => t.languageCode === 'en');
-      if (!track) track = captionTracks[0];
-
-      if (!track || !track.baseUrl) {
-        throw new Error("No suitable caption track found.");
+      if (!data.events || data.events.length === 0) {
+        throw new Error("No transcript events found for this video.");
       }
 
-      // 4. Fetch the actual transcript XML (or JSON3) via Triple-Proxy
-      let transcriptData = null;
-      const subUrl = track.baseUrl + '&fmt=json3';
-      let subSuccess = false;
-
-      for (const getProxyUrl of proxies) {
-        try {
-          const subResponse = await fetch(getProxyUrl(subUrl));
-          if (!subResponse.ok) continue;
+      // Format segments
+      const formattedSubtitles = data.events
+        .filter((e: any) => e.segs && e.segs.length > 0)
+        .map((event: any, i: number) => {
+          const text = event.segs.map((s: any) => s.utf8).join("").trim();
+          const start = event.tStartMs / 1000;
+          const duration = event.dDurationMs / 1000;
           
-          const result = await subResponse.json();
-          const subContent = result.contents || result.data || (typeof result === 'string' ? result : JSON.stringify(result));
-          
-          transcriptData = typeof subContent === 'string' ? JSON.parse(subContent) : subContent;
-          if (transcriptData && transcriptData.events) {
-            subSuccess = true;
-            break;
-          }
-        } catch (e) {
-          console.warn("[YouTube] Subtitle proxy failed, trying next...");
-        }
-      }
+          const formatTime = (seconds: number) => {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            const ms = Math.floor((seconds % 1) * 1000);
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
+          };
 
-      if (!subSuccess || !transcriptData) {
-        throw new Error("Could not download the subtitle content after multiple attempts.");
-      }
+          return {
+            index: i + 1,
+            startTime: formatTime(start),
+            endTime: formatTime(start + duration),
+            text
+          };
+        })
+        .filter((s: any) => s.text.length > 0);
+
+      setYoutubeTitle("YouTube Video");
+      setYoutubeVideoId(videoId);
+      setYoutubeIsDemo(false);
+      setYoutubeSubtitles(formattedSubtitles);
+      setTranslatedYoutubeSubtitles([]);
+      setYoutubeStatus("success");
+      
+      console.log(`[YouTube] Successfully fetched ${formattedSubtitles.length} segments via No-CORS API.`);
 
       // 5. Format the segments
       const formattedSubtitles = transcriptData.events
