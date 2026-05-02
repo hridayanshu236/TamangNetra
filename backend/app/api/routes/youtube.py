@@ -1,7 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
-from typing import List, Dict, Any, Optional
+import yt_dlp
+import httpx
+import json
 import re
+from typing import List, Dict, Any, Optional
 
 router = APIRouter(prefix="/youtube", tags=["youtube"])
 
@@ -28,48 +30,85 @@ async def fetch_subtitles(url: str = Query(...), lang: str = "en"):
     if not video_id:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
+    # yt-dlp options to only get metadata/subtitles
+    ydl_opts = {
+        'skip_download': True,
+        'writesubtitles': True,
+        'writeautomaticsub': True,
+        'subtitleslangs': [lang, 'en', 'ne'],
+        'quiet': True,
+        'no_warnings': True,
+    }
+
     try:
-        # Try preferred language
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        
-        try:
-            transcript = transcript_list.find_transcript([lang, 'en'])
-        except NoTranscriptFound:
-            # Fallback to any available manually created or auto-generated transcript
-            transcript = transcript_list.find_generated_transcript(['en'])
-            if not transcript:
-                transcript = next(iter(transcript_list))
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            
+            subtitles_data = info.get('subtitles', {})
+            auto_subtitles_data = info.get('automatic_captions', {})
+            
+            # Priority: Manual subs in requested lang -> Manual subs in English -> Auto subs in requested lang -> Auto subs in English
+            target_sub = None
+            for l in [lang, 'en', 'ne']:
+                if l in subtitles_data:
+                    target_sub = subtitles_data[l]
+                    break
+                if l in auto_subtitles_data:
+                    target_sub = auto_subtitles_data[l]
+                    break
+            
+            if not target_sub:
+                raise Exception("No suitable subtitles found")
 
-        data = transcript.fetch()
-        
-        formatted_subtitles = []
-        for i, entry in enumerate(data):
-            start = entry['start']
-            duration = entry['duration']
-            formatted_subtitles.append({
-                "index": i + 1,
-                "startTime": format_time(start),
-                "endTime": format_time(start + duration),
-                "text": entry['text']
-            })
+            # Get the JSON3 or VTT format URL
+            json3_url = next((s['url'] for s in target_sub if s.get('ext') == 'json3'), None)
+            if not json3_url:
+                # Fallback to any URL if json3 isn't available
+                json3_url = target_sub[0]['url']
 
-        return {
-            "subtitles": formatted_subtitles,
-            "videoId": video_id,
-            "title": "YouTube Video",
-            "isDemo": False
-        }
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(json3_url)
+                if resp.status_code != 200:
+                    raise Exception(f"Failed to download subtitle file: {resp.status_code}")
+                
+                content = resp.json()
+                
+                # Parse YouTube JSON3 format
+                formatted_subtitles = []
+                events = content.get('events', [])
+                idx = 1
+                for event in events:
+                    if 'segs' not in event:
+                        continue
+                    
+                    text = "".join([s.get('utf8', '') for s in event['segs']]).strip()
+                    if not text:
+                        continue
+                        
+                    start_ms = event.get('tStartMs', 0)
+                    duration_ms = event.get('dDurationMs', 0)
+                    
+                    formatted_subtitles.append({
+                        "index": idx,
+                        "startTime": format_time(start_ms / 1000.0),
+                        "endTime": format_time((start_ms + duration_ms) / 1000.0),
+                        "text": text
+                    })
+                    idx += 1
 
-    except TranscriptsDisabled:
-        raise HTTPException(status_code=400, detail="Subtitles are disabled for this video")
+                return {
+                    "subtitles": formatted_subtitles,
+                    "videoId": video_id,
+                    "title": info.get('title', 'YouTube Video'),
+                    "isDemo": False
+                }
+
     except Exception as e:
-        # If everything fails, return the demo subtitles so the UI doesn't break
-        # but the user knows it's a fallback
         return {
             "subtitles": [
-                {"index": 1, "startTime": "00:00:01,000", "endTime": "00:00:04,000", "text": "Could not fetch real subtitles for this video."},
-                {"index": 2, "startTime": "00:00:04,500", "endTime": "00:00:08,000", "text": "This might be due to YouTube restrictions or missing captions."},
-                {"index": 3, "startTime": "00:00:08,500", "endTime": "00:00:12,000", "text": "Please try a video with manual English captions."},
+                {"index": 1, "startTime": "00:00:01,000", "endTime": "00:00:04,000", "text": "Real subtitles could not be fetched."},
+                {"index": 2, "startTime": "00:00:04,500", "endTime": "00:00:08,000", "text": f"Error: {str(e)}"},
+                {"index": 3, "startTime": "00:00:08,500", "endTime": "00:00:12,000", "text": "This usually means the video has restricted access or no captions."},
             ],
             "videoId": video_id,
             "title": "YouTube Video (Unavailable)",
