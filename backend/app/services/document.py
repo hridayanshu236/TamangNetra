@@ -35,8 +35,21 @@ class DocumentProcessor:
         )
         self.ocr_handler = OcrHandler() if OcrHandler else None
 
+    def _is_math(self, text: str) -> bool:
+        """Heuristic to identify math/formulas that should not be translated."""
+        t = text.strip()
+        # Single characters or symbols
+        if len(t) <= 2 and not t.isalnum(): return True
+        # Common math symbols/patterns
+        if any(c in t for c in ['=', '+', '-', '*', '/', '^', '(', ')', '[', ']', '{', '}', '>', '<', '∫', '∑', '∏', '√', '∂', '∆']):
+            # But ensure it's not just a sentence with a parenthesis
+            if len(t) < 15: return True
+        # LaTeX-like patterns
+        if '\\' in t or '_' in t: return True
+        return False
+
     async def process_pdf(self, file_content: bytes, src_lang: str, tgt_lang: str, progress_callback=None) -> Dict[str, Any]:
-        """Bit-Identical Native Span Extraction for PDF."""
+        """Bit-Identical Native Span Extraction for PDF with Formula Skipping."""
         try:
             doc = fitz.open(stream=file_content, filetype="pdf")
             orig_texts = []
@@ -49,13 +62,27 @@ class DocumentProcessor:
                                 txt = span["text"].strip()
                                 if txt: orig_texts.append(txt)
             
-            unique_texts = list(set([t for t in orig_texts if t.strip()]))
-            translated_list = await self.translation_service.batch_translate(
-                unique_texts, src_lang, tgt_lang, progress_callback=progress_callback, translate_all=True
-            )
-            trans_map = dict(zip(unique_texts, translated_list))
+            # Filter out math/formulas before hitting the translation service
+            translatable_texts = []
+            for t in list(set(orig_texts)):
+                if not self._is_math(t):
+                    translatable_texts.append(t)
             
-            results = [{"original": t, "translated": trans_map.get(t, t)} for t in orig_texts]
+            # Batch translate ONLY the actual text
+            translated_list = await self.translation_service.batch_translate(
+                translatable_texts, src_lang, tgt_lang, progress_callback=progress_callback, translate_all=True
+            )
+            
+            # Build the map (formulas map to themselves)
+            trans_map = dict(zip(translatable_texts, translated_list))
+            
+            results = []
+            for t in orig_texts:
+                results.append({
+                    "original": t,
+                    "translated": trans_map.get(t, t) # Default to original if it was skipped (math)
+                })
+                
             return {
                 "original": "\n".join(orig_texts),
                 "translated": "\n".join([r["translated"] for r in results]),
@@ -80,7 +107,6 @@ class DocumentProcessor:
                 pdf_res = await self.process_pdf(file_content, src_lang, tgt_lang, progress_callback=progress_callback)
                 return {**pdf_res, "fileInfo": {"name": file_name, "type": "pdf", "size": file_size}}
             
-            # (DOCX handling included for completeness)
             if filename.endswith(".docx"):
                 extracted_text = await self.process_docx(file_content)
                 segments = [s.strip() for s in extracted_text.split("---EXACT-BLOCK---") if s.strip()]
@@ -105,8 +131,6 @@ class DocumentProcessor:
                 trans_map = {item["original"]: item["translated"] for item in processed["segments"]}
                 reconstructed = self.native_reconstructor.reconstruct(content, trans_map)
                 return reconstructed, "application/pdf"
-            
-            # Fallback for non-PDF
             return content, "application/octet-stream"
         except Exception as e:
             raise ValueError(f"Error reconstructing document: {str(e)}")
