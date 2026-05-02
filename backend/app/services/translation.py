@@ -164,12 +164,15 @@ class TranslationService:
         source_language: str,
         target_language: str,
         translate_all: bool = False,
-        progress_callback=None
+        progress_callback=None,
+        cache_only: bool = False
     ) -> list[str]:
         """Translate multiple texts concurrently using asyncio.gather.
 
         Phase 1: Resolve from cache / skip non-translatable (instant).
         Phase 2: Fire all remaining texts concurrently (max 20 at a time).
+        
+        cache_only: If True, will NOT hit the TMT API. Will return original if not in KG.
         """
         import asyncio
         import re
@@ -283,10 +286,14 @@ class TranslationService:
                         if progress_callback:
                             await progress_callback(completed, total, {"original": text, "translated": text})
 
-        if uncached_indices:
+        if uncached_indices and not cache_only:
             await asyncio.gather(*(translate_one(i) for i in uncached_indices))
             # Save once at the end of the batch for efficiency
             _save_knowledge_graph()
+        elif uncached_indices:
+            # If cache_only and we have misses, just populate results with originals
+            for idx in uncached_indices:
+                results[idx] = texts[idx]
 
         logger.info(
             f"batch_translate complete: {api_calls} API calls, "

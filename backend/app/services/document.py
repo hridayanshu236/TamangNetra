@@ -275,7 +275,7 @@ class DocumentProcessor:
         # We can just batch_translate (it will hit the disk cache instantly)
         unique_texts = list(set([t for t in texts_to_translate if t.strip()]))
         translated_list = await self.translation_service.batch_translate(
-            unique_texts, src_lang, tgt_lang
+            unique_texts, src_lang, tgt_lang, cache_only=True
         )
         trans_map = dict(zip(unique_texts, translated_list))
         
@@ -311,7 +311,7 @@ class DocumentProcessor:
         # Translate all run texts concurrently
         run_texts = [run.text for run in all_runs]
         translated = await self.translation_service.batch_translate(
-            run_texts, src_lang, tgt_lang
+            run_texts, src_lang, tgt_lang, cache_only=True
         )
 
         # Write translated text back into each run.
@@ -341,9 +341,10 @@ class DocumentProcessor:
             sentences = self._split_into_sentences(cell_text)
             cell_sentences.append(sentences)
             all_sentences.extend(sentences)
-                
+        # CRITICAL FIX: Use the Knowledge Graph ONLY. Never hit the TMT API during reconstruction.
+        # This prevents the 'Double API Hit' when downloading/viewing.
         translated = await self.translation_service.batch_translate(
-            all_sentences, src_lang, tgt_lang, translate_all=True
+            all_sentences, src_lang, tgt_lang, translate_all=True, cache_only=True
         )
         
         idx = 0
