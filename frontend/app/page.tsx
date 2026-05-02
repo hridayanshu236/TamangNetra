@@ -528,14 +528,18 @@ export default function Home() {
         'Tamang': 'ne',
       };
       const langCode = langMapping[sourceLanguage] || 'en';
+      const targetUrl = `${youtubeUrl.trim()}&t=${Date.now()}`;
+      console.log(`[YouTube] Calling backend API with URL: ${targetUrl} (Lang: ${langCode})`);
 
-      const payload = await apiClient.fetchYoutubeSubtitles(`${youtubeUrl.trim()}&t=${Date.now()}`, langCode);
+      const payload = await apiClient.fetchYoutubeSubtitles(targetUrl, langCode);
 
       setYoutubeTitle(payload.title || "");
       setYoutubeVideoId(payload.videoId || "");
       setYoutubeIsDemo(Boolean(payload.isDemo));
       setYoutubeSubtitles(payload.subtitles || []);
+      setTranslatedYoutubeSubtitles([]); // Clear old translations
       setYoutubeStatus("success");
+      console.log(`[YouTube] Successfully fetched ${payload.subtitles?.length || 0} segments. Demo mode: ${payload.isDemo}`);
     } catch {
       setYoutubeStatus("error");
     }
