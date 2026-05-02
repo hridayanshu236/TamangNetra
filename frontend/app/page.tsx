@@ -529,7 +529,7 @@ export default function Home() {
       };
       const langCode = langMapping[sourceLanguage] || 'en';
 
-      const payload = await apiClient.fetchYoutubeSubtitles(youtubeUrl.trim(), langCode);
+      const payload = await apiClient.fetchYoutubeSubtitles(`${youtubeUrl.trim()}&t=${Date.now()}`, langCode);
 
       setYoutubeTitle(payload.title || "");
       setYoutubeVideoId(payload.videoId || "");
@@ -1162,6 +1162,8 @@ export default function Home() {
                             autoplay: 0,
                             modestbranding: 1,
                             rel: 0,
+                            enablejsapi: 1,
+                            origin: typeof window !== 'undefined' ? window.location.origin : '',
                           },
                         }}
                       />
