@@ -10,38 +10,33 @@ from typing import List, Dict, Any, Optional
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/youtube", tags=["YouTube"])
 
+import os
+
 @router.get("/transcript")
 async def get_youtube_transcript(v: str = Query(..., description="YouTube Video ID")):
     """
     Fetch YouTube transcripts using youtube-transcript-api.
-    Includes defensive fallbacks for different library versions.
+    Uses Webshare residential proxies to bypass data center IP blocks.
     """
     try:
-        data = None
+        # Proxy Configuration from Environment Variables
+        # Recommended format for Webshare: http://user:pass@p.webshare.io:80
+        username = os.getenv("WEBSHARE_USERNAME")
+        password = os.getenv("WEBSHARE_PASSWORD")
+        proxy_host = os.getenv("WEBSHARE_PROXY_HOST", "p.webshare.io:80")
         
-        # Method 1: Standard static call (jdepoix version)
-        if hasattr(YouTubeTranscriptApi, 'get_transcript'):
-            logger.info(f"Using static get_transcript for {v}")
-            data = YouTubeTranscriptApi.get_transcript(v, languages=['en', 'ne', 'hi'])
+        proxies = None
+        if username and password:
+            proxy_url = f"http://{username}:{password}@{proxy_host}"
+            proxies = {
+                "http": proxy_url,
+                "https": proxy_url
+            }
+            logger.info(f"Using Webshare proxy for {v}")
+
+        # Fetch transcript
+        data = YouTubeTranscriptApi.get_transcript(v, languages=['en', 'ne', 'hi'], proxies=proxies)
         
-        # Method 2: Instance-based call (alternate version)
-        if data is None:
-            logger.info(f"Trying instance-based fetch for {v}")
-            api = YouTubeTranscriptApi()
-            if hasattr(api, 'get_transcript'):
-                data = api.get_transcript(v, languages=['en', 'ne', 'hi'])
-            elif hasattr(api, 'fetch'):
-                data = api.fetch(v) # As suggested by some alternate versions
-                
-        if data is None:
-            # Last ditch: try the module-level function if it exists
-            import youtube_transcript_api
-            if hasattr(youtube_transcript_api, 'get_transcript'):
-                data = youtube_transcript_api.get_transcript(v, languages=['en', 'ne', 'hi'])
-
-        if data is None:
-            raise AttributeError("Could not find a valid fetch method in YouTubeTranscriptApi")
-
         rows = []
         for i, entry in enumerate(data):
             start = entry['start']
