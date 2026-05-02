@@ -45,7 +45,22 @@ async def get_youtube_transcript(v: str = Query(..., description="YouTube Video 
         )
         
         # Fetch transcript
-        data = ytt_api.fetch(v)
+        from youtube_transcript_api._errors import (
+            TranscriptsDisabled,
+            NoTranscriptFound,
+            VideoUnavailable,
+            RequestBlocked,
+            IPBlocked,
+        )
+        
+        try:
+            data = ytt_api.fetch(v)
+        except (VideoUnavailable, TranscriptsDisabled, NoTranscriptFound) as e:
+            logger.warning(f"Expected YouTube error for {v}: {e}")
+            raise HTTPException(status_code=422, detail=str(e))
+        except (RequestBlocked, IPBlocked) as e:
+            logger.error(f"Proxy blocked for {v}: {e}")
+            raise HTTPException(status_code=503, detail="Proxy blocked by YouTube. Try again later.")
         
         rows = []
         for i, entry in enumerate(data):
@@ -66,8 +81,10 @@ async def get_youtube_transcript(v: str = Query(..., description="YouTube Video 
             "rows": rows
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"YouTube Transcript API failed for {v}: {e}")
+        logger.error(f"YouTube Transcript API failed unexpectedly for {v}: {e}")
         
         # Fallback to hardcoded demo data for demo video
         if v == "SJPu1spHqfk":
@@ -84,5 +101,5 @@ async def get_youtube_transcript(v: str = Query(..., description="YouTube Video 
             
         raise HTTPException(
             status_code=500, 
-            detail=f"Could not retrieve transcripts: {str(e)}"
+            detail=f"Unexpected error fetching transcript: {str(e)}"
         )
