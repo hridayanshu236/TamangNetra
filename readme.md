@@ -1,114 +1,51 @@
-# TamangNetra
+# TamangNetra 👁️
 
-## Overview
+TamangNetra is an advanced, high-performance document translation system designed to bridge the language gap for the Tamang and Nepali communities. It leverages state-of-the-art AI to translate documents while preserving their original layout, formatting, and images.
 
-TamangNetra is a translation pipeline with a React + Vite frontend and FastAPI backend.
-It supports:
-- text translation
-- document translation for PDF, DOCX, CSV/TSV
-- OCR image translation
-- YouTube subtitle translation
+## ✨ Features
 
-## Backend Setup
+- **Real-Time Translation**: Lightning-fast translation powered by the TMT API.
+- **Document Integrity**: Supports PDF, DOCX, CSV, and Excel while keeping styles (bold, italic), tables, and images intact.
+- **OCR Support**: Built-in optical character recognition for translating text within images.
+- **Smart Caching**: Persistent Knowledge Graph cache ensures that previously translated sentences are retrieved instantly at zero cost.
+- **Modern UI**: A sleek, premium dashboard with dark mode, real-time progress tracking, and interactive previews.
+- **Multi-Format Support**:
+  - **PDF**: Granular span-level redaction preserves formulas and images.
+  - **DOCX**: Run-level reconstruction maintains Microsoft Word styling.
+  - **YouTube**: Fetch and translate subtitles directly from video links.
 
-1. Go to the project root (TamangNetra):
-   ```bash
-   cd TamangNetra
-   ```
+## 🚀 Getting Started
 
-2. Create and activate a Python virtual environment:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
+### Prerequisites
+- Python 3.10+
+- Node.js 18+
+- Tesseract OCR (Optional, for image translation)
 
-3. Install backend dependencies:
-   ```bash
-   pip install -r backend/requirements.txt
-   ```
+### Quick Setup
 
-4. Create the `.env` file in the `backend` directory:
+1. **Backend**:
    ```bash
    cd backend
-   cp .env.example .env
+   python -m venv .venv
+   source .venv/bin/activate  # .venv\Scripts\activate on Windows
+   pip install -r requirements.txt
+   python main.py
    ```
 
-5. Edit `backend/.env` and set the required values:
+2. **Frontend**:
    ```bash
-   TMT_TOKEN=your_actual_token_here
-   FRONTEND_URL=http://localhost:5173
-   ```
-
-6. Run the backend server from the project root:
-   ```bash
-   cd ..
-   uvicorn backend.api.main:app --reload --host 0.0.0.0 --port 8000
-   ```
-
-## Frontend Setup
-
-1. Go to the frontend folder from the project root:
-   ```bash
-   cd tamangnetra-frontend
-   ```
-
-2. Install dependencies:
-   ```bash
+   cd frontend
    npm install
-   ```
-
-3. Run the frontend dev server:
-   ```bash
    npm run dev
    ```
 
-4. (Optional) Add `VITE_API_BASE` to a `.env` file in `tamangnetra-frontend` if you need a custom backend URL:
-   ```bash
-   VITE_API_BASE=http://localhost:8000
-   ```
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## API Endpoints
+## 🛠️ Usage
+1. **Upload**: Drag and drop your document (PDF, DOCX, etc.).
+2. **Translate**: Select your target language and click "Translate".
+3. **Review**: Watch the real-time progress and typewriter-effect preview.
+4. **Download**: Get your perfectly formatted translated document.
 
-- `POST /translate-text`
-  - JSON body: `{ text, src_lang, tgt_lang }`
-  - Response: `{ output }`
-
-- `POST /translate-file`
-  - Form data: `file`, `src_lang`, `tgt_lang`
-  - Response: `{ filename, download_url, glossary }`
-
-- `POST /ocr-translate`
-  - JSON body: `{ image_b64, src_lang, tgt_lang, pen_bbox? }`
-
-- `POST /youtube-translate`
-  - JSON body: `{ url, src_lang, tgt_lang }`
-
-- `GET /download/{job_id}/{filename}`
-  - Downloads the translated file.
-
-## Notes
-
-- The frontend now uses Tailwind CSS for layout and styling.
-- The backend is configured to allow requests from `http://localhost:5173`.
-- The external translator is called with `Authorization: Bearer <TMT_TOKEN>`.
-- Document translation supports PDF, DOCX, CSV, and TSV files.
-- Image OCR translation accepts base64 images and optional bounding boxes.
-
-## Running the App
-
-**Terminal 1 (Backend):**
-```bash
-cd TamangNetra
-source .venv/bin/activate
-uvicorn backend.api.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-**Terminal 2 (Frontend):**
-```bash
-cd TamangNetra/tamangnetra-frontend
-npm run dev
-```
-
-Then open the frontend at `http://localhost:5173` and use the interface to translate text, documents, images, or YouTube subtitles.
-
-
+## 📜 License
+© 2026 TamangNetra Team. All rights reserved.
