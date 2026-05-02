@@ -14,13 +14,34 @@ router = APIRouter(prefix="/youtube", tags=["YouTube"])
 async def get_youtube_transcript(v: str = Query(..., description="YouTube Video ID")):
     """
     Fetch YouTube transcripts using youtube-transcript-api.
-    This is the most resilient method for retrieving captions.
+    Includes defensive fallbacks for different library versions.
     """
     try:
-        # Fetch transcript in preferred languages
-        # This will try manual first, then auto-generated
-        data = YouTubeTranscriptApi.get_transcript(v, languages=['en', 'ne', 'hi'])
+        data = None
         
+        # Method 1: Standard static call (jdepoix version)
+        if hasattr(YouTubeTranscriptApi, 'get_transcript'):
+            logger.info(f"Using static get_transcript for {v}")
+            data = YouTubeTranscriptApi.get_transcript(v, languages=['en', 'ne', 'hi'])
+        
+        # Method 2: Instance-based call (alternate version)
+        if data is None:
+            logger.info(f"Trying instance-based fetch for {v}")
+            api = YouTubeTranscriptApi()
+            if hasattr(api, 'get_transcript'):
+                data = api.get_transcript(v, languages=['en', 'ne', 'hi'])
+            elif hasattr(api, 'fetch'):
+                data = api.fetch(v) # As suggested by some alternate versions
+                
+        if data is None:
+            # Last ditch: try the module-level function if it exists
+            import youtube_transcript_api
+            if hasattr(youtube_transcript_api, 'get_transcript'):
+                data = youtube_transcript_api.get_transcript(v, languages=['en', 'ne', 'hi'])
+
+        if data is None:
+            raise AttributeError("Could not find a valid fetch method in YouTubeTranscriptApi")
+
         rows = []
         for i, entry in enumerate(data):
             start = entry['start']
@@ -36,15 +57,14 @@ async def get_youtube_transcript(v: str = Query(..., description="YouTube Video 
         return {
             "video_id": v,
             "title": f"YouTube Video ({v})",
-            "language": "en", # default assumed if success
+            "language": "en",
             "rows": rows
         }
 
     except Exception as e:
         logger.error(f"YouTube Transcript API failed for {v}: {e}")
         
-        # Fallback to hardcoded demo data ONLY for the specific demo video
-        # This ensures the hackathon presentation always works for the main demo
+        # Fallback to hardcoded demo data for demo video
         if v == "SJPu1spHqfk":
             return {
                 "video_id": v,
