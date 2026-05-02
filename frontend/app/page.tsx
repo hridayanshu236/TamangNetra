@@ -13,6 +13,7 @@ import {
   Video,
   UploadCloud,
   FileText,
+  X,
 } from "lucide-react";
 import { Navbar } from "@/src/components/tamangnetra/Navbar";
 import { Badge } from "@/src/components/ui/badge";
