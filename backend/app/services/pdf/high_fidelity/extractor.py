@@ -75,13 +75,18 @@ class HighFidelityPdfExtractor:
             line_html = "<div class='line' style='position: absolute; left: {0}pt; top: {1}pt;'>".format(
                 line["bbox"][0], line["bbox"][1]
             )
-            for span in line["spans"]:
-                text = span["text"]
-                # Detect Math
-                if self._is_math(text):
-                    line_html += f"<span class='math' style='font-size: {span['size']}pt;'>{text}</span>"
-                else:
-                    line_html += f"<span style='font-size: {span['size']}pt;'>{text}</span>"
+            # Merge spans in the line to avoid fragmented translation
+            full_line_text = "".join([span["text"] for span in line["spans"]])
+            if not full_line_text.strip(): continue
+            
+            # Use the first span's size as a heuristic for the whole line
+            avg_size = line["spans"][0]["size"] if line["spans"] else 10
+            
+            if self._is_math(full_line_text):
+                line_html += f"<span class='math' style='font-size: {avg_size}pt;'>{full_line_text}</span>"
+            else:
+                line_html += f"<span style='font-size: {avg_size}pt;'>{full_line_text}</span>"
+            
             line_html += "</div>"
             block_html += line_html
         return block_html

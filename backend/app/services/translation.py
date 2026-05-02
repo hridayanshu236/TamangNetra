@@ -181,8 +181,12 @@ class TranslationService:
             s = t.strip()
             if not s:
                 return False
-            # Basic numbers, dates, codes, phone numbers
-            if re.fullmatch(r"[\d,.\s\-+%$€£¥₹₨()x:]+", s): return False
+            # Basic pure numbers/dates only (exclude if they have any letters)
+            if re.fullmatch(r"[\d,.\s\-+%$€£¥₹₨()x:]+", s): 
+                # If it has meaningful labels like "Credit Hours", we should translate
+                if any(c.isalpha() for c in s): return True
+                return False
+            
             if len(s) <= 1: return False
             # Dates like 2020-08-24
             if re.fullmatch(r"\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4}", s): return False
@@ -190,13 +194,11 @@ class TranslationService:
             if re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", s): return False
             # URLs
             if re.search(r"https?://\S+|www\.\S+", s): return False
-            # Short technical codes
-            if re.fullmatch(r"[A-Z0-9]{1,10}\.?", s): return False
             
             # Heuristic: If it has very few letters relative to its length, it's likely a technical string
             # count both English and Devanagari letters
             letters = len(re.findall(r'[a-zA-Z\u0900-\u097F]', s))
-            if len(s) > 4 and letters / len(s) < 0.4:
+            if len(s) > 10 and letters / len(s) < 0.2:
                 return False
 
             return True

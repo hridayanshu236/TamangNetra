@@ -41,23 +41,35 @@ class PdfReconstructor:
             for span in page.spans:
                 trans_text = translated_map.get(span.text, span.text)
                 
-                font_name = 'NotoSansDevanagari-Bold' if span.is_bold else 'NotoSansDevanagari'
+                is_mostly_english = all(ord(char) < 128 for char in trans_text)
+                
+                # Switch font to Helvetica for English to ensure perfect visibility
+                # Use NotoSansDevanagari for everything else
+                if is_mostly_english:
+                    font_name = 'Helvetica-Bold' if span.is_bold else 'Helvetica'
+                else:
+                    font_name = 'NotoSansDevanagari-Bold' if span.is_bold else 'NotoSansDevanagari'
+                
                 c.setFont(font_name, span.size)
-                c.setFillColor(Color(span.color[0], span.color[1], span.color[2]))
+                
+                # Safety: Ensure color is visible (avoid pure white on white background)
+                r, g, b = span.color
+                if r > 0.95 and g > 0.95 and b > 0.95:
+                    r, g, b = 0.2, 0.2, 0.2 
+                c.setFillColor(Color(r, g, b))
 
                 x = span.bbox[0]
-                y = h - span.bbox[3] + 2 # Minor baseline adjustment for Devanagari
+                y_offset = 0 if is_mostly_english else 2
+                y = h - span.bbox[3] + y_offset
                 
                 # Handle Overflow: Scale font down if text is too wide for the box
                 target_w = span.bbox[2] - span.bbox[0]
-                current_w = c.stringWidth(trans_text, font_name, span.size)
-                
-                final_size = span.size
-                if current_w > target_w and target_w > 0:
-                    final_size = span.size * (target_w / current_w)
-                    c.setFont(font_name, final_size)
-
-                c.drawString(x, y, trans_text)
+                if target_w > 5: # Ignore tiny boxes
+                    current_w = c.stringWidth(trans_text, font_name, span.size)
+                    if current_w > target_w:
+                        final_size = span.size * (target_w / current_w)
+                        c.setFont(font_name, final_size)
+                    c.drawString(x, y, trans_text)
 
             # 3. Place Tables (Basic grid + text)
             for table in page.tables:

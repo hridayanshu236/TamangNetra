@@ -68,13 +68,8 @@ class PdfExtractor:
                         for line in block["lines"]:
                             for span in line["spans"]:
                                 s_bbox = span["bbox"]
-                                # Check if span is inside any table
-                                is_in_table = any(
-                                    s_bbox[0] >= t[0] and s_bbox[1] >= t[1] and 
-                                    s_bbox[2] <= t[2] and s_bbox[3] <= t[3] 
-                                    for t in table_bboxes
-                                )
-                                if is_in_table: continue
+                                # We no longer skip table text because the reconstructor handles absolute positioning
+                                # if is_in_table: continue
 
                                 # Bit mask check for bold/italic in PyMuPDF
                                 # flags bit 1: italic, bit 4: bold

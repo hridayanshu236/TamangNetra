@@ -76,7 +76,7 @@ class DocumentProcessor:
             
             # 2. Translate HTML (this populates the Knowledge Graph cache)
             translated_html = await self.hf_translator.translate_html(
-                html_content, src_lang, tgt_lang, progress_callback=progress_callback
+                html_content, src_lang, tgt_lang, progress_callback=progress_callback, translate_all=True
             )
             
             # 3. Extract unique segments for the frontend preview
@@ -319,7 +319,7 @@ class DocumentProcessor:
 
             unique_texts = list(set([t for t in texts_to_translate if t.strip()]))
             translated_list = await self.translation_service.batch_translate(
-                unique_texts, src_lang, tgt_lang, cache_only=True
+                unique_texts, src_lang, tgt_lang, cache_only=True, translate_all=True
             )
             trans_map = dict(zip(unique_texts, translated_list))
             return self.pdf_reconstructor.reconstruct(pages_data, trans_map)

@@ -9,7 +9,7 @@ class HighFidelityPdfTranslator:
     def __init__(self, translation_service: TranslationService):
         self.translation_service = translation_service
 
-    async def translate_html(self, html_content: str, src_lang: str, tgt_lang: str, progress_callback=None, cache_only: bool = False) -> str:
+    async def translate_html(self, html_content: str, src_lang: str, tgt_lang: str, progress_callback=None, cache_only: bool = False, translate_all: bool = False) -> str:
         """
         Walks the HTML tree and translates only natural language text.
         Protects:
@@ -33,7 +33,7 @@ class HighFidelityPdfTranslator:
             for child in element.children:
                 if isinstance(child, NavigableString):
                     text = child.strip()
-                    if text and len(text) > 1: # Ignore single chars/numbers usually
+                    if text: # Be more permissive
                         translatable_nodes.append(child)
                 elif child.name:
                     _collect_text(child)
@@ -48,7 +48,10 @@ class HighFidelityPdfTranslator:
 
         # 3. Batch translate
         translated_texts = await self.translation_service.batch_translate(
-            texts_to_translate, src_lang, tgt_lang, progress_callback=progress_callback, cache_only=cache_only
+            texts_to_translate, src_lang, tgt_lang, 
+            progress_callback=progress_callback, 
+            cache_only=cache_only,
+            translate_all=translate_all
         )
 
         # 4. Replace text in soup
