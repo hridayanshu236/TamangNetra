@@ -178,20 +178,22 @@ class TranslationService:
             s = t.strip()
             if not s:
                 return False
-            # Basic numbers, dates, codes
-            if re.fullmatch(r"[\d,.\s\-+%$€£¥₹₨]+", s): return False
+            # Basic numbers, dates, codes, phone numbers
+            if re.fullmatch(r"[\d,.\s\-+%$€£¥₹₨()x:]+", s): return False
             if len(s) <= 1: return False
+            # Dates like 2020-08-24
             if re.fullmatch(r"\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4}", s): return False
-            if re.fullmatch(r"[A-Z0-9]{1,6}\.?", s): return False
+            # Emails
+            if re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", s): return False
+            # URLs
+            if re.search(r"https?://\S+|www\.\S+", s): return False
+            # Short technical codes
+            if re.fullmatch(r"[A-Z0-9]{1,10}\.?", s): return False
             
-            # Formula Detection: Look for math operators and symbols
-            math_operators = r'[±×÷√∞ΣΔΠ≈≠≤≥∑∏∫∂∇∀∃∈∉∋⊆⊇∪∩∧∨¬⇒⇔↔+\-*/=<>^|_]'
-            if re.search(math_operators, s) and any(c.isdigit() for c in s):
-                return False
-                
             # Heuristic: If it has very few letters relative to its length, it's likely a technical string
-            letters = len(re.findall(r'[a-zA-Z]', s))
-            if len(s) > 3 and letters / len(s) < 0.3:
+            # count both English and Devanagari letters
+            letters = len(re.findall(r'[a-zA-Z\u0900-\u097F]', s))
+            if len(s) > 4 and letters / len(s) < 0.4:
                 return False
 
             return True
@@ -233,7 +235,7 @@ class TranslationService:
             logger.info(f"Cache misses ({len(uncached_indices)}/{total}): {misses}")
 
         # ── Phase 2: Translate uncached texts concurrently ────────────────────
-        # Reduced concurrency to 3 to avoid 429 rate limits which cause timeouts
+        # Reduced concurrency to 3 to avoid 429 rate limits
         MAX_CONCURRENT = 3
         semaphore = asyncio.Semaphore(MAX_CONCURRENT)
         lock = asyncio.Lock()
@@ -246,14 +248,14 @@ class TranslationService:
 
             async with semaphore:
                 try:
-                    # Check cache again inside semaphore just in case another task filled it
-                    async with lock:
-                        if cache_key in _knowledge_graph:
-                            results[idx] = _knowledge_graph[cache_key]
+                    # Check memory cache first (ultra-fast)
+                    if cache_key in _knowledge_graph:
+                        results[idx] = _knowledge_graph[cache_key]
+                        async with lock:
                             completed += 1
                             if progress_callback:
                                 await progress_callback(completed, total)
-                            return
+                        return
 
                     request = TranslationRequest(
                         text=text,
@@ -265,7 +267,6 @@ class TranslationService:
 
                     async with lock:
                         _knowledge_graph[cache_key] = translated
-                        _save_knowledge_graph()
                         api_calls += 1
                     results[idx] = translated
                 except Exception as e:
@@ -278,8 +279,9 @@ class TranslationService:
                     await progress_callback(completed, total)
 
         if uncached_indices:
-            # Sort by length to process shorter ones first? No, let's just run.
             await asyncio.gather(*(translate_one(i) for i in uncached_indices))
+            # Save once at the end of the batch for efficiency
+            _save_knowledge_graph()
 
         logger.info(
             f"batch_translate complete: {api_calls} API calls, "
