@@ -34,8 +34,18 @@ async def get_youtube_transcript(v: str = Query(..., description="YouTube Video 
             }
             logger.info(f"Using Webshare proxy for {v}")
 
+        # Initialize API with Webshare Proxy Config
+        from youtube_transcript_api.proxies import WebshareProxyConfig
+        
+        ytt_api = YouTubeTranscriptApi(
+            proxy_config=WebshareProxyConfig(
+                proxy_username=os.getenv("WEBSHARE_USERNAME"),
+                proxy_password=os.getenv("WEBSHARE_PASSWORD"),
+            )
+        )
+        
         # Fetch transcript
-        data = YouTubeTranscriptApi.get_transcript(v, languages=['en', 'ne', 'hi'], proxies=proxies)
+        data = ytt_api.fetch(v)
         
         rows = []
         for i, entry in enumerate(data):
