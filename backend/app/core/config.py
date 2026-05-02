@@ -25,7 +25,9 @@ class Settings(BaseSettings):
     secret_key: str = "your-secret-key-change-in-production"
     encryption_key: str = "your-256-bit-hex-key-here"
     # Frontend origin(s) that are allowed to make requests
-    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    cors_origins: list[str] | str = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # Hosts that the API will respond to
+    trusted_hosts: list[str] | str = ["localhost", "127.0.0.1", "0.0.0.0"]
     
     # Translation API
     tmt_api_token: str = "team_xxxxxxxxx"
@@ -47,11 +49,11 @@ class Settings(BaseSettings):
         env_file = ".env"
         case_sensitive = False
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "trusted_hosts", mode="before")
     @classmethod
-    def parse_cors_origins(cls, value: Any) -> list[str]:
+    def parse_list(cls, value: Any) -> list[str]:
         if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+            return [v.strip() for v in value.split(",") if v.strip()]
         return value
 
 

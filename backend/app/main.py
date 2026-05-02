@@ -53,7 +53,7 @@ def create_app() -> FastAPI:
     # Trusted Host Middleware
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["localhost", "127.0.0.1", "0.0.0.0"]
+        allowed_hosts=settings.trusted_hosts
     )
     
     # Include routes

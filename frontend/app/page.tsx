@@ -412,7 +412,7 @@ export default function Home() {
     formData.append("src_lang", sourceLanguage);
     formData.append("tgt_lang", targetLanguage);
 
-    const response = await fetch("http://localhost:8000/document/reconstruct", {
+    const response = await fetch("/api/reconstruct", {
       method: "POST",
       body: formData,
     });
@@ -673,7 +673,7 @@ export default function Home() {
           </div>
           <Button variant="outline" size="sm" asChild className="w-fit hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/30 transition-colors">
             <a
-              href="http://localhost:8000/docs"
+              href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/docs`}
               target="_blank"
               rel="noreferrer"
             >
