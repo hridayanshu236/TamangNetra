@@ -17,6 +17,7 @@ import {
   Plus,
 } from "lucide-react";
 import { Navbar } from "@/src/components/tamangnetra/Navbar";
+import { HeroSection } from "@/src/components/tamangnetra/HeroSection";
 import { Badge } from "@/src/components/ui/badge";
 import { Button } from "@/src/components/ui/button";
 import {
@@ -675,34 +676,9 @@ export default function Home() {
 
       <div className="relative z-10">
         <Navbar />
+        <HeroSection />
 
-        <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="space-y-4"
-        >
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-2">
-              <Badge variant="secondary" className="w-fit gap-1.5 bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20 px-3 py-1">
-                <ShieldCheck className="size-3.5" /> Google TMT Hackathon
-              </Badge>
-              <div className="flex flex-col gap-1 mt-2">
-                <p className="text-xs font-bold uppercase tracking-widest text-emerald-600/80 dark:text-emerald-400/80">
-                  Bridging cultures with digital precision.
-                </p>
-                <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-500">
-                  TamangNetra
-                </h1>
-              </div>
-              <p className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
-                An advanced neural translation ecosystem for English, Nepali, and Tamang. 
-                Experience <strong>pixel-perfect layout reconstruction</strong> for PDF, DOCX, CSV, and TSV files.
-              </p>
-            </div>
-          </div>
-        </motion.section>
+        <main id="main-processing-section" className="relative mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8 gradient-mesh-bg rounded-t-3xl shadow-[0_-20px_50px_-20px_rgba(16,185,129,0.1)]">
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -1288,6 +1264,17 @@ export default function Home() {
         </Tabs>
         </motion.div>
       </main>
+      
+      <footer className="border-t border-border/40 bg-background/50 backdrop-blur-md py-12 px-4">
+        <div className="mx-auto max-w-6xl flex items-center justify-center">
+          <div className="flex items-center gap-2">
+            <span className="text-xl font-bold bg-gradient-to-r from-emerald-500 to-teal-500 bg-clip-text text-transparent">
+              TamangNetra
+            </span>
+            <span className="text-sm text-muted-foreground">तामाङनेत्र</span>
+          </div>
+        </div>
+      </footer>
       </div>
 
       {/* PDF Viewer Overlay */}
