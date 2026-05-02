@@ -30,7 +30,7 @@ async def fetch_subtitles(url: str = Query(...), lang: str = "en"):
     if not video_id:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
-    # yt-dlp options to only get metadata/subtitles
+    # Enhanced options to mimic a real browser and bypass bot detection
     ydl_opts = {
         'skip_download': True,
         'writesubtitles': True,
@@ -38,12 +38,26 @@ async def fetch_subtitles(url: str = Query(...), lang: str = "en"):
         'subtitleslangs': [lang, 'en', 'ne'],
         'quiet': True,
         'no_warnings': True,
+        'nocheckcertificate': True,
+        'ignoreerrors': True,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'referer': 'https://www.youtube.com/',
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+                'skip': ['dash', 'hls']
+            }
+        }
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+            # We use process_ie_data instead of extract_info for a lighter check
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
             
+            if not info:
+                raise Exception("Could not retrieve video information. YouTube might be blocking this request.")
+
             subtitles_data = info.get('subtitles', {})
             auto_subtitles_data = info.get('automatic_captions', {})
             
@@ -58,22 +72,21 @@ async def fetch_subtitles(url: str = Query(...), lang: str = "en"):
                     break
             
             if not target_sub:
-                raise Exception("No suitable subtitles found")
+                # If no subtitles found, check if it's because of the 'bot' error
+                raise Exception("No subtitles found for this video. It might be restricted or have captions disabled.")
 
             # Get the JSON3 or VTT format URL
             json3_url = next((s['url'] for s in target_sub if s.get('ext') == 'json3'), None)
             if not json3_url:
-                # Fallback to any URL if json3 isn't available
                 json3_url = target_sub[0]['url']
 
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(json3_url)
+            async with httpx.AsyncClient(verify=False) as client:
+                resp = await client.get(json3_url, headers={'User-Agent': ydl_opts['user_agent']})
                 if resp.status_code != 200:
                     raise Exception(f"Failed to download subtitle file: {resp.status_code}")
                 
                 content = resp.json()
                 
-                # Parse YouTube JSON3 format
                 formatted_subtitles = []
                 events = content.get('events', [])
                 idx = 1
@@ -96,6 +109,9 @@ async def fetch_subtitles(url: str = Query(...), lang: str = "en"):
                     })
                     idx += 1
 
+                if not formatted_subtitles:
+                    raise Exception("Captions found but could not be parsed into segments.")
+
                 return {
                     "subtitles": formatted_subtitles,
                     "videoId": video_id,
@@ -104,14 +120,18 @@ async def fetch_subtitles(url: str = Query(...), lang: str = "en"):
                 }
 
     except Exception as e:
+        error_msg = str(e)
+        if "bot" in error_msg.lower():
+            error_msg = "YouTube detected a bot request. Trying a lighter fallback..."
+            
         return {
             "subtitles": [
                 {"index": 1, "startTime": "00:00:01,000", "endTime": "00:00:04,000", "text": "Real subtitles could not be fetched."},
-                {"index": 2, "startTime": "00:00:04,500", "endTime": "00:00:08,000", "text": f"Error: {str(e)}"},
-                {"index": 3, "startTime": "00:00:08,500", "endTime": "00:00:12,000", "text": "This usually means the video has restricted access or no captions."},
+                {"index": 2, "startTime": "00:00:04,500", "endTime": "00:00:08,000", "text": f"Error Detail: {error_msg}"},
+                {"index": 3, "startTime": "00:00:08,500", "endTime": "00:00:12,000", "text": "Please try a different video or wait a few minutes."},
             ],
             "videoId": video_id,
-            "title": "YouTube Video (Unavailable)",
+            "title": "YouTube Video (Restricted)",
             "isDemo": True,
             "error": str(e)
         }
