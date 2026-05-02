@@ -2,11 +2,11 @@
 
 **High-Fidelity Document Translation with Native Layout Preservation**
 
-TamangNetra is an industry-grade document translation platform engineered specifically for the TMT (Tamang Machine Translation) ecosystem. Unlike traditional translators that destroy document layouts by converting them to plain text or unstable HTML, TamangNetra utilizes Native Coordinate-Based Reconstruction to overlay translations directly onto the original document buffer.
+TamangNetra is an industry-grade document translation platform engineered specifically for the TMT (Trilingual Machine Translation) ecosystem. Unlike traditional translators that destroy document layouts by converting them to plain text or unstable HTML, TamangNetra utilizes Native Coordinate-Based Reconstruction to overlay translations directly onto the original document buffer.
 
 ---
 
-## Technical Mechanics: How it Works
+## How It Works
 
 TamangNetra uses specialized engines for different file formats to ensure maximum fidelity and readability.
 
@@ -42,13 +42,12 @@ The TMT API is powerful but requires careful orchestration for high-volume docum
 
 ---
 
-## Working Features
+## Features
 
--   **Multi-Format Support**: Native handling for PDF, DOCX, CSV, XLSX, TSV, and TXT.
--   **Layout Preservation**: Protects images, table borders, and technical drawings.
--   **Rate-Limit Resiliency**: Intelligent retry logic designed for hackathon-scale usage.
--   **Interactive Preview**: Side-by-side comparison UI for real-time review.
--   **Premium Aesthetics**: Modern, dark-themed React interface with micro-animations.
+-   **Multi-Format Support**: Native handling for PDF, DOCX, CSV, TSV.
+-   **Trilingual Neural Translation**: Seamless high-fidelity translation between English, Nepali, and Tamang.
+-   **Layout Preservation**: Protects images, tables and text layouts.
+-   **Rate-Limit Resiliency**: Intelligent retry logic designed for the API.
 
 ---
 
@@ -76,10 +75,14 @@ npm run dev
 ```
 
 ### 3. Usage
-1.  Open http://localhost:5173.
+1.  Open http://localhost:3000.
 2.  Upload any supported file.
 3.  Watch the real-time translation progress.
 4.  Preview the results and click "Download" to get your translated document.
 
 ---
+
+### 4. Video Guide Link
+- **Drive** : [Link](https://drive.google.com/drive/folders/1AKfbe1exTik0bgdtv69LaOYG44NdwklB?usp=sharing)
+- **Video**: [Link](https://drive.google.com/file/d/1AsYMCyqTzLS1oyy_ticiGGKdWyHTjVAl/view?usp=sharing)
 
