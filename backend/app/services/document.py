@@ -38,17 +38,13 @@ class DocumentProcessor:
     def _is_math(self, text: str) -> bool:
         """Heuristic to identify math/formulas that should not be translated."""
         t = text.strip()
-        # Single characters or symbols
         if len(t) <= 2 and not t.isalnum(): return True
-        # Common math symbols/patterns
         if any(c in t for c in ['=', '+', '-', '*', '/', '^', '(', ')', '[', ']', '{', '}', '>', '<', '∫', '∑', '∏', '√', '∂', '∆']):
-            # But ensure it's not just a sentence with a parenthesis
             if len(t) < 15: return True
-        # LaTeX-like patterns
         if '\\' in t or '_' in t: return True
         return False
 
-    async def process_pdf(self, file_content: bytes, src_lang: str, tgt_lang: str, progress_callback=None) -> Dict[str, Any]:
+    async def process_pdf(self, file_content: bytes, src_lang: str, tgt_lang: str, progress_callback=None, cache_only: bool = False) -> Dict[str, Any]:
         """Bit-Identical Native Span Extraction for PDF with Formula Skipping."""
         try:
             doc = fitz.open(stream=file_content, filetype="pdf")
@@ -62,25 +58,26 @@ class DocumentProcessor:
                                 txt = span["text"].strip()
                                 if txt: orig_texts.append(txt)
             
-            # Filter out math/formulas before hitting the translation service
             translatable_texts = []
             for t in list(set(orig_texts)):
                 if not self._is_math(t):
                     translatable_texts.append(t)
             
-            # Batch translate ONLY the actual text
+            # Use cache_only if requested (crucial for reconstruction phase)
             translated_list = await self.translation_service.batch_translate(
-                translatable_texts, src_lang, tgt_lang, progress_callback=progress_callback, translate_all=True
+                translatable_texts, src_lang, tgt_lang, 
+                progress_callback=progress_callback, 
+                translate_all=True,
+                cache_only=cache_only
             )
             
-            # Build the map (formulas map to themselves)
             trans_map = dict(zip(translatable_texts, translated_list))
             
             results = []
             for t in orig_texts:
                 results.append({
                     "original": t,
-                    "translated": trans_map.get(t, t) # Default to original if it was skipped (math)
+                    "translated": trans_map.get(t, t)
                 })
                 
             return {
@@ -104,7 +101,8 @@ class DocumentProcessor:
         filename = file_name.lower()
         try:
             if filename.endswith(".pdf"):
-                pdf_res = await self.process_pdf(file_content, src_lang, tgt_lang, progress_callback=progress_callback)
+                # First pass: normal translation (hits API if needed)
+                pdf_res = await self.process_pdf(file_content, src_lang, tgt_lang, progress_callback=progress_callback, cache_only=False)
                 return {**pdf_res, "fileInfo": {"name": file_name, "type": "pdf", "size": file_size}}
             
             if filename.endswith(".docx"):
@@ -127,7 +125,8 @@ class DocumentProcessor:
         filename = file.filename.lower()
         try:
             if filename.endswith(".pdf"):
-                processed = await self.process_pdf(content, src_lang, tgt_lang)
+                # CRITICAL: Use cache_only=True during reconstruction to avoid redundant API hits
+                processed = await self.process_pdf(content, src_lang, tgt_lang, cache_only=True)
                 trans_map = {item["original"]: item["translated"] for item in processed["segments"]}
                 reconstructed = self.native_reconstructor.reconstruct(content, trans_map)
                 return reconstructed, "application/pdf"
