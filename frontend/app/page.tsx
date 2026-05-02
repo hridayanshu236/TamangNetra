@@ -288,7 +288,7 @@ export default function Home() {
 
     setDocumentStatus("loading");
     setDocumentProgress(0);
-    setDocumentProgressMessage("Uploading document...");
+    setDocumentProgressMessage("Translating document...");
     
     try {
       const formData = new FormData();
@@ -314,6 +314,7 @@ export default function Home() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let partial = "";
+      setDocumentProgressMessage("Translating document...");
 
       while (true) {
         const { done, value } = await reader.read();
@@ -980,51 +981,42 @@ export default function Home() {
                   <Card className="border-dashed md:col-span-2 bg-gradient-to-br from-emerald-50/30 to-teal-50/30 dark:from-emerald-950/20 dark:to-teal-950/20">
                     <CardContent className="p-4 text-sm text-muted-foreground h-full relative">
                       {documentStatus === "loading" ? (() => {
-                        const fakeProgress = documentProgress;
                         const mins = Math.floor(documentElapsedSeconds / 60);
                         const secs = documentElapsedSeconds % 60;
+                        const timeStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                         return (
-                          <div className="flex flex-col gap-5 py-4 px-2">
-                            {/* Header */}
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
+                          <div className="flex flex-col items-center justify-center gap-6 py-12 px-4 text-center">
+                            {/* Animated Activity Ring */}
+                            <div className="relative">
+                              <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                                className="size-20 rounded-full border-2 border-emerald-500/20 border-t-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.15)]"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center">
                                 <motion.div
-                                  animate={{ rotate: 360 }}
-                                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                                  className="size-4 rounded-full border-2 border-emerald-500 border-t-transparent"
+                                  animate={{ opacity: [0.3, 1, 0.3] }}
+                                  transition={{ repeat: Infinity, duration: 1.5 }}
+                                  className="size-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
                                 />
-                                <span className="text-sm font-medium text-foreground">
-                                  {documentProgressMessage}
-                                </span>
                               </div>
-                              <span className="font-mono text-xs font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                                {fakeProgress}%
-                              </span>
                             </div>
 
-                            {/* Progress track */}
-                            <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-muted/60">
-                              <motion.div
-                                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400"
-                                initial={{ width: "0%" }}
-                                animate={{ width: `${fakeProgress}%` }}
-                                transition={{ duration: 0.3, ease: "easeOut" }}
-                              />
-                              {/* Shimmer overlay */}
-                              <motion.div
-                                className="absolute inset-y-0 w-24 bg-gradient-to-r from-transparent via-white/30 to-transparent rounded-full"
-                                animate={{ x: ["-100%", "500%"] }}
-                                transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
-                              />
+                            <div className="space-y-2">
+                              <h3 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
+                                {documentProgressMessage}
+                              </h3>
+                              <p className="text-3xl font-mono tracking-tighter text-emerald-600 dark:text-emerald-400 tabular-nums">
+                                {timeStr}
+                              </p>
                             </div>
 
-                            {/* Stats row */}
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-muted-foreground">
-                                ⏱ <span className="font-mono font-medium">{mins}m {secs}s</span> elapsed
+                            <div className="flex items-center gap-4 text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                              <span className="flex items-center gap-1.5">
+                                <span className="size-1 rounded-full bg-emerald-500" /> Neural API Active
                               </span>
-                              <span className="text-emerald-600 dark:text-emerald-400">
-                                ✓ Stream connected
+                              <span className="flex items-center gap-1.5">
+                                <span className="size-1 rounded-full bg-teal-500" /> Preserving Layout
                               </span>
                             </div>
                           </div>

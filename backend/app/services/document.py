@@ -7,13 +7,13 @@ import fitz  # PyMuPDF
 from docx import Document as DocxDocument
 from PIL import Image
 import pytesseract
-from fastapi import UploadFile
+from fastapi import UploadFile, Depends
 import re
 import requests as req
 import logging
 
 from app.services.translation import get_translation_service, TranslationService
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.models.schemas import TranslationRequest
 
 # New PDF Pipeline
@@ -261,32 +261,26 @@ class DocumentProcessor:
                         texts_to_translate.extend([str(c) if c else "" for c in row])
             if self.ocr_handler:
                 for img in page.images:
-                    ocr_res = self.ocr_handler.extract_text_from_image(img.image_bytes)
-                    texts_to_translate.extend([r["text"] for r in ocr_res])
+                    try:
+                        ocr_res = self.ocr_handler.extract_text_from_image(img.image_bytes)
+                        texts_to_translate.extend([r["text"] for r in ocr_res])
+                    except Exception as e:
+                        logger.warning(f"OCR failed for image block: {e}")
 
         if not texts_to_translate:
             return content
 
-        # Check if we have a fully populated cache for this file
-        if cache_key in self._translation_cache:
-            logger.info(f"Using cached translation mapping for {cache_key}")
-            trans_map = self._translation_cache[cache_key]
-        else:
-            # Batch translate all segments
-            unique_texts = list(set([t for t in texts_to_translate if t.strip()]))
-            translated_list = await self.translation_service.batch_translate(
-                unique_texts, src_lang, tgt_lang
-            )
-            # Create mapping and store in cache
-            trans_map = dict(zip(unique_texts, translated_list))
-            self._translation_cache[cache_key] = trans_map
+        # All translations are already in the persistent Knowledge Graph
+        # so we don't need a separate in-memory _translation_cache check.
+        # We can just batch_translate (it will hit the disk cache instantly)
+        unique_texts = list(set([t for t in texts_to_translate if t.strip()]))
+        translated_list = await self.translation_service.batch_translate(
+            unique_texts, src_lang, tgt_lang
+        )
+        trans_map = dict(zip(unique_texts, translated_list))
         
         # Reconstruct
         return self.pdf_reconstructor.reconstruct(pages_data, trans_map)
-
-
-
-
 
     async def _reconstruct_docx(self, content: bytes, src_lang: str, tgt_lang: str) -> bytes:
         """Translate DOCX run-by-run to preserve bold, italic, underline, fonts, and colours."""
@@ -321,10 +315,7 @@ class DocumentProcessor:
         )
 
         # Write translated text back into each run.
-        # We only update run.text — bold, italic, underline, font, size etc.
-        # are all stored on the run's XML element and are untouched.
         for run, trans_text in zip(all_runs, translated):
-            # Preserve a trailing space if the original had one
             if run.text.endswith(" ") and not trans_text.endswith(" "):
                 trans_text += " "
             run.text = trans_text
@@ -351,7 +342,6 @@ class DocumentProcessor:
             cell_sentences.append(sentences)
             all_sentences.extend(sentences)
                 
-        # Translate ALL sentences for Track 2 CSV constraint
         translated = await self.translation_service.batch_translate(
             all_sentences, src_lang, tgt_lang, translate_all=True
         )
@@ -370,8 +360,7 @@ class DocumentProcessor:
         idx = 0
         for i in range(len(df)):
             for j in range(len(df.columns)):
-                if texts_to_translate[len(df.columns) + idx]: # Only replace non-empty
-                    # Cast to object first to prevent pandas warning when replacing int with string
+                if texts_to_translate[len(df.columns) + idx]:
                     if df.dtypes.iloc[j] != 'object':
                         df[df.columns[j]] = df[df.columns[j]].astype('object')
                     df.iat[i, j] = translated_vals[idx]
@@ -384,5 +373,5 @@ class DocumentProcessor:
             df.to_excel(out, index=False)
         return out.getvalue()
 
-def get_document_processor(translation_service: TranslationService) -> DocumentProcessor:
+def get_document_processor(translation_service: TranslationService = Depends(get_translation_service)) -> DocumentProcessor:
     return DocumentProcessor(translation_service)
