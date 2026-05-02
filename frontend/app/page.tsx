@@ -1306,12 +1306,22 @@ export default function Home() {
         animate={{ opacity: 1, scale: 1 }}
         className="fixed bottom-6 right-6 z-50"
       >
-        <div className="flex items-center gap-2 rounded-full border border-emerald-500/20 bg-background/80 px-4 py-2 text-xs font-medium text-emerald-600 shadow-lg backdrop-blur-md dark:text-emerald-400">
+        <div className={`flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-medium shadow-lg backdrop-blur-md transition-all duration-500 ${
+          healthStatus === "success" 
+            ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400" 
+            : healthStatus === "error"
+              ? "border-red-500/20 bg-red-500/5 text-red-600 dark:text-red-400"
+              : "border-amber-500/20 bg-amber-500/5 text-amber-600 dark:text-amber-400"
+        }`}>
           <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+            <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${
+              healthStatus === "success" ? "bg-emerald-400" : healthStatus === "error" ? "bg-red-400" : "bg-amber-400"
+            }`}></span>
+            <span className={`relative inline-flex h-2 w-2 rounded-full ${
+              healthStatus === "success" ? "bg-emerald-500" : healthStatus === "error" ? "bg-red-500" : "bg-amber-500"
+            }`}></span>
           </span>
-          Backend Connected
+          {healthStatus === "success" ? "Backend Connected" : healthStatus === "error" ? "Backend Offline" : "Checking Connection..."}
         </div>
       </motion.div>
     </div>
