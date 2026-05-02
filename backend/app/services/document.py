@@ -81,7 +81,10 @@ class DocumentProcessor:
         # Populate cache for reconstruction
         self._translation_cache[cache_key] = dict(zip(unique_texts, translated_list))
                         
-        return "---EXACT-BLOCK---".join(translated_list)
+        return {
+            "original_segments": unique_texts,
+            "translated_segments": translated_list
+        }
 
     async def process_docx(self, file_content: bytes) -> str:
         """Extract text from DOCX run-by-run to match reconstruction exactly."""
@@ -138,37 +141,38 @@ class DocumentProcessor:
         
         try:
             if filename.endswith(".pdf"):
-                extracted_text = await self.process_pdf(content, src_lang, tgt_lang, progress_callback=progress_callback)
-            elif filename.endswith(".docx"):
-                extracted_text = await self.process_docx(content)
-            elif filename.endswith(".csv"):
-                extracted_text = await self.process_spreadsheet(content, 'csv')
-            elif filename.endswith(".xlsx") or filename.endswith(".xls"):
-                extracted_text = await self.process_spreadsheet(content, 'excel')
-            elif filename.endswith((".jpg", ".jpeg", ".png")):
-                extracted_text = await self.process_image(content)
+                # PDF already handles batch translation internally to populate reconstruction cache
+                pdf_res = await self.process_pdf(content, src_lang, tgt_lang, progress_callback=progress_callback)
+                segments = pdf_res["original_segments"]
+                translated_texts = pdf_res["translated_segments"]
+                extracted_text = "\n".join(segments)
             else:
-                raise ValueError("Unsupported file format")
+                if filename.endswith(".docx"):
+                    extracted_text = await self.process_docx(content)
+                elif filename.endswith(".csv"):
+                    extracted_text = await self.process_spreadsheet(content, 'csv')
+                elif filename.endswith(".xlsx") or filename.endswith(".xls"):
+                    extracted_text = await self.process_spreadsheet(content, 'excel')
+                elif filename.endswith((".jpg", ".jpeg", ".png")):
+                    extracted_text = await self.process_image(content)
+                else:
+                    raise ValueError("Unsupported file format")
+                    
+                if not extracted_text.strip():
+                    raise ValueError("No text could be extracted from the document")
+                    
+                # Split into manageable chunks at the sentence level
+                segments = self._split_into_sentences(extracted_text)
                 
-            if not extracted_text.strip():
-                raise ValueError("No text could be extracted from the document")
-                
-            # Split into manageable chunks at the sentence level
-            segments = self._split_into_sentences(extracted_text)
+                # Translate segments
+                translated_texts = await self.translation_service.batch_translate(
+                    texts=segments,
+                    source_language=src_lang,
+                    target_language=tgt_lang,
+                    progress_callback=progress_callback
+                )
             
-            # Translate segments
-            translated_segments = []
             results = []
-            
-            # Use batch_translate if the translation service supports it natively
-            # Since we have it in TranslationService:
-            translated_texts = await self.translation_service.batch_translate(
-                texts=segments,
-                source_language=src_lang,
-                target_language=tgt_lang,
-                progress_callback=progress_callback
-            )
-            
             for orig, trans in zip(segments, translated_texts):
                 results.append({
                     "original": orig,
