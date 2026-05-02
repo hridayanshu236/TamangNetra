@@ -542,21 +542,44 @@ export default function Home() {
       const videoId = extractVideoId(youtubeUrl.trim());
       if (!videoId) throw new Error("Invalid YouTube URL");
 
-      // 2. Fetch Video Page to find caption tracks via CORS proxy
+      // 2. Fetch Video Page to find caption tracks via Triple-Proxy Engine
       let pageHtml = "";
-      try {
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
-        const pageResponse = await fetch(proxyUrl);
-        if (!pageResponse.ok) throw new Error("Primary proxy failed");
-        const data = await pageResponse.json();
-        pageHtml = data.contents;
-      } catch (e) {
-        // Fallback to corsproxy.io if allorigins fails
-        console.warn("[YouTube] Primary proxy failed, trying fallback...");
-        const fallbackUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
-        const fallbackResponse = await fetch(fallbackUrl);
-        if (!fallbackResponse.ok) throw new Error("Both proxies failed to fetch YouTube page");
-        pageHtml = await fallbackResponse.text();
+      const proxies = [
+        (url: string) => `https://shcors.vercel.app/proxy?url=${encodeURIComponent(url)}`,
+        (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+        (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`
+      ];
+
+      const targetUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      let success = false;
+
+      for (const getProxyUrl of proxies) {
+        try {
+          console.log(`[YouTube] Trying proxy: ${getProxyUrl(targetUrl)}`);
+          const response = await fetch(getProxyUrl(targetUrl));
+          if (!response.ok) continue;
+          
+          const result = await response.json();
+          // allorigins returns .contents, shcors returns .data or body
+          pageHtml = result.contents || result.data || (typeof result === 'string' ? result : JSON.stringify(result));
+          
+          if (pageHtml && pageHtml.includes("captionTracks")) {
+            success = true;
+            break;
+          }
+        } catch (e) {
+          console.warn(`[YouTube] Proxy failed, trying next...`);
+        }
+      }
+
+      if (!success) {
+        // Final fallback: try raw fetch (might work if user has a browser extension)
+        try {
+          const rawResp = await fetch(targetUrl);
+          pageHtml = await rawResp.text();
+        } catch (e) {
+          throw new Error("All fetching methods failed. YouTube might be blocking all requests. Please try again in a few minutes.");
+        }
       }
 
       // 3. Parse captionTracks from the page source
@@ -585,15 +608,31 @@ export default function Home() {
         throw new Error("No suitable caption track found.");
       }
 
-      // 4. Fetch the actual transcript XML (or JSON3)
-      let transcriptData;
-      try {
-        const transcriptResponse = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(track.baseUrl + '&fmt=json3')}`);
-        const data = await transcriptResponse.json();
-        transcriptData = JSON.parse(data.contents);
-      } catch (e) {
-        const fallbackResponse = await fetch(`https://corsproxy.io/?${encodeURIComponent(track.baseUrl + '&fmt=json3')}`);
-        transcriptData = await fallbackResponse.json();
+      // 4. Fetch the actual transcript XML (or JSON3) via Triple-Proxy
+      let transcriptData = null;
+      const subUrl = track.baseUrl + '&fmt=json3';
+      let subSuccess = false;
+
+      for (const getProxyUrl of proxies) {
+        try {
+          const subResponse = await fetch(getProxyUrl(subUrl));
+          if (!subResponse.ok) continue;
+          
+          const result = await subResponse.json();
+          const subContent = result.contents || result.data || (typeof result === 'string' ? result : JSON.stringify(result));
+          
+          transcriptData = typeof subContent === 'string' ? JSON.parse(subContent) : subContent;
+          if (transcriptData && transcriptData.events) {
+            subSuccess = true;
+            break;
+          }
+        } catch (e) {
+          console.warn("[YouTube] Subtitle proxy failed, trying next...");
+        }
+      }
+
+      if (!subSuccess || !transcriptData) {
+        throw new Error("Could not download the subtitle content after multiple attempts.");
       }
 
       // 5. Format the segments
