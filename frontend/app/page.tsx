@@ -1135,6 +1135,28 @@ export default function Home() {
                     <Download className="mr-2 size-4" />
                     Download SRT
                   </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const text = prompt("Paste raw transcript text here (one line per segment):");
+                      if (text) {
+                        const lines = text.split("\n").filter(l => l.trim());
+                        const mockSubs = lines.map((line, i) => ({
+                          index: i + 1,
+                          startTime: `00:00:${(i * 4).toString().padStart(2, '0')},000`,
+                          endTime: `00:00:${(i * 4 + 3).toString().padStart(2, '0')},000`,
+                          text: line.trim()
+                        }));
+                        setYoutubeSubtitles(mockSubs);
+                        setYoutubeStatus("success");
+                        setYoutubeTitle("Manual Input");
+                        setYoutubeIsDemo(false);
+                      }
+                    }}
+                  >
+                    <Plus className="mr-2 size-4" />
+                    Manual Input
+                  </Button>
                   <StatusPill
                     status={youtubeStatus}
                     label={

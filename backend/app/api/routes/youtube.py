@@ -30,7 +30,7 @@ async def fetch_subtitles(url: str = Query(...), lang: str = "en"):
     if not video_id:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
-    # Enhanced options to mimic a real browser and bypass bot detection
+    # The 'android' client is often less restricted than 'web'
     ydl_opts = {
         'skip_download': True,
         'writesubtitles': True,
@@ -38,13 +38,10 @@ async def fetch_subtitles(url: str = Query(...), lang: str = "en"):
         'subtitleslangs': [lang, 'en', 'ne'],
         'quiet': True,
         'no_warnings': True,
-        'nocheckcertificate': True,
-        'ignoreerrors': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'referer': 'https://www.youtube.com/',
+        'user_agent': 'com.google.android.youtube/19.05.36 (Linux; U; Android 14; en_US; Pixel 8 Pro Build/AP1A.240305.019)',
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],
+                'player_client': ['android'],
                 'skip': ['dash', 'hls']
             }
         }
@@ -52,30 +49,27 @@ async def fetch_subtitles(url: str = Query(...), lang: str = "en"):
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # We use process_ie_data instead of extract_info for a lighter check
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
             
-            if not info:
-                raise Exception("Could not retrieve video information. YouTube might be blocking this request.")
-
             subtitles_data = info.get('subtitles', {})
             auto_subtitles_data = info.get('automatic_captions', {})
             
-            # Priority: Manual subs in requested lang -> Manual subs in English -> Auto subs in requested lang -> Auto subs in English
             target_sub = None
+            # Try manual first, then auto
             for l in [lang, 'en', 'ne']:
                 if l in subtitles_data:
                     target_sub = subtitles_data[l]
                     break
-                if l in auto_subtitles_data:
-                    target_sub = auto_subtitles_data[l]
-                    break
             
             if not target_sub:
-                # If no subtitles found, check if it's because of the 'bot' error
-                raise Exception("No subtitles found for this video. It might be restricted or have captions disabled.")
+                for l in [lang, 'en', 'ne']:
+                    if l in auto_subtitles_data:
+                        target_sub = auto_subtitles_data[l]
+                        break
+            
+            if not target_sub:
+                raise Exception("No captions found for this video.")
 
-            # Get the JSON3 or VTT format URL
             json3_url = next((s['url'] for s in target_sub if s.get('ext') == 'json3'), None)
             if not json3_url:
                 json3_url = target_sub[0]['url']
@@ -83,24 +77,18 @@ async def fetch_subtitles(url: str = Query(...), lang: str = "en"):
             async with httpx.AsyncClient(verify=False) as client:
                 resp = await client.get(json3_url, headers={'User-Agent': ydl_opts['user_agent']})
                 if resp.status_code != 200:
-                    raise Exception(f"Failed to download subtitle file: {resp.status_code}")
+                    raise Exception(f"Failed to download subtitles ({resp.status_code})")
                 
                 content = resp.json()
-                
                 formatted_subtitles = []
                 events = content.get('events', [])
                 idx = 1
                 for event in events:
-                    if 'segs' not in event:
-                        continue
-                    
+                    if 'segs' not in event: continue
                     text = "".join([s.get('utf8', '') for s in event['segs']]).strip()
-                    if not text:
-                        continue
-                        
+                    if not text: continue
                     start_ms = event.get('tStartMs', 0)
                     duration_ms = event.get('dDurationMs', 0)
-                    
                     formatted_subtitles.append({
                         "index": idx,
                         "startTime": format_time(start_ms / 1000.0),
@@ -108,9 +96,6 @@ async def fetch_subtitles(url: str = Query(...), lang: str = "en"):
                         "text": text
                     })
                     idx += 1
-
-                if not formatted_subtitles:
-                    raise Exception("Captions found but could not be parsed into segments.")
 
                 return {
                     "subtitles": formatted_subtitles,
@@ -120,18 +105,13 @@ async def fetch_subtitles(url: str = Query(...), lang: str = "en"):
                 }
 
     except Exception as e:
-        error_msg = str(e)
-        if "bot" in error_msg.lower():
-            error_msg = "YouTube detected a bot request. Trying a lighter fallback..."
-            
         return {
             "subtitles": [
-                {"index": 1, "startTime": "00:00:01,000", "endTime": "00:00:04,000", "text": "Real subtitles could not be fetched."},
-                {"index": 2, "startTime": "00:00:04,500", "endTime": "00:00:08,000", "text": f"Error Detail: {error_msg}"},
-                {"index": 3, "startTime": "00:00:08,500", "endTime": "00:00:12,000", "text": "Please try a different video or wait a few minutes."},
+                {"index": 1, "startTime": "00:00:01,000", "endTime": "00:00:04,000", "text": "YouTube is restricting access to this video's captions."},
+                {"index": 2, "startTime": "00:00:04,500", "endTime": "00:00:08,000", "text": "Tip: Try a different video or use the 'Manual Upload' feature."},
+                {"index": 3, "startTime": "00:00:08,500", "endTime": "00:00:12,000", "text": f"Error: {str(e)[:100]}..."},
             ],
             "videoId": video_id,
-            "title": "YouTube Video (Restricted)",
-            "isDemo": True,
-            "error": str(e)
+            "title": "Restricted Access",
+            "isDemo": True
         }
