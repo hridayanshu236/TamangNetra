@@ -729,9 +729,9 @@ export default function Home() {
               <TabsTrigger value="documents" className="rounded-full px-6 py-2 data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-300">
                 Document
               </TabsTrigger>
-              <TabsTrigger value="youtube" className="rounded-full px-6 py-2 data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-300">
+              {/* <TabsTrigger value="youtube" className="rounded-full px-6 py-2 data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-300">
                 YouTube
-              </TabsTrigger>
+              </TabsTrigger> */}
             </TabsList>
           </div>
 
@@ -1072,8 +1072,7 @@ export default function Home() {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-
+          </TabsContent>          {false && (
           <TabsContent value="youtube" id="youtube">
             <Card className="backdrop-blur-xl bg-background/60 border-white/10 shadow-xl overflow-hidden">
               <CardHeader>
@@ -1299,6 +1298,7 @@ export default function Home() {
               </CardContent>
             </Card>
           </TabsContent>
+          )}
         </Tabs>
         </motion.div>
       </main>
