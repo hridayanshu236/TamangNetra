@@ -51,10 +51,21 @@ class Settings(BaseSettings):
     
     # Logging
     log_level: str = "INFO"
+
+    # Async / Celery (Optional)
+    redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = "redis://localhost:6379/2"
+
+    # YouTube Proxy
+    webshare_username: str = ""
+    webshare_password: str = ""
+    webshare_proxy_host: str = "p.webshare.io:80"
     
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"
 
     @field_validator("cors_origins", "trusted_hosts", mode="before")
     @classmethod

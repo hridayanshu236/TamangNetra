@@ -11,6 +11,7 @@ from fastapi import UploadFile, Depends
 import re
 import requests as req
 import logging
+from bs4 import BeautifulSoup
 
 from app.services.translation import get_translation_service, TranslationService
 from app.core.config import Settings, get_settings
@@ -19,6 +20,10 @@ from app.models.schemas import TranslationRequest
 # New PDF Pipeline
 from .pdf.extractor import PdfExtractor, PageData
 from .pdf.reconstructor import PdfReconstructor
+from .pdf.high_fidelity.extractor import HighFidelityPdfExtractor
+from .pdf.high_fidelity.translator import HighFidelityPdfTranslator
+from .pdf.high_fidelity.reconstructor import HighFidelityPdfReconstructor
+
 try:
     from .pdf.ocr import OcrHandler
 except ImportError:
@@ -48,18 +53,70 @@ class DocumentProcessor:
             font_regular_path="assets/fonts/NotoSansDevanagari-Regular.ttf",
             font_bold_path="assets/fonts/NotoSansDevanagari-Bold.ttf"
         )
+        # High Fidelity Pipeline
+        self.hf_extractor = HighFidelityPdfExtractor()
+        self.hf_translator = HighFidelityPdfTranslator(translation_service)
+        self.hf_reconstructor = HighFidelityPdfReconstructor(
+            font_regular_path="assets/fonts/NotoSansDevanagari-Regular.ttf"
+        )
         self.ocr_handler = OcrHandler() if OcrHandler else None
         # Cache for translation mappings: {file_hash: {src_text: tgt_text}}
         self._translation_cache: Dict[str, Dict[str, str]] = {}
 
-    async def process_pdf(self, file_content: bytes, src_lang: str, tgt_lang: str, progress_callback=None) -> str:
-        """Extract and translate PDF content, populating the cache for reconstruction."""
-        file_hash = hashlib.md5(file_content).hexdigest()
-        cache_key = f"{file_hash}_{src_lang}_{tgt_lang}"
-        
+    async def process_pdf(self, file_content: bytes, src_lang: str, tgt_lang: str, progress_callback=None) -> Dict[str, Any]:
+        """
+        High-Fidelity PDF Processing:
+        1. Extract to HTML (Rich structure)
+        2. Translate HTML (Preserving tags/math)
+        3. Extract segments for UI preview
+        """
+        try:
+            # 1. Convert to rich HTML
+            html_content = self.hf_extractor.pdf_to_html(file_content)
+            
+            # 2. Translate HTML (this populates the Knowledge Graph cache)
+            translated_html = await self.hf_translator.translate_html(
+                html_content, src_lang, tgt_lang, progress_callback=progress_callback
+            )
+            
+            # 3. Extract unique segments for the frontend preview
+            # We use BeautifulSoup to get the clean text segments AND images
+            soup_orig = BeautifulSoup(html_content, "html.parser")
+            soup_trans = BeautifulSoup(translated_html, "html.parser")
+            
+            # Find all content elements (text or img)
+            def _get_segments(soup):
+                segs = []
+                # We iterate through body descendants to find text and images
+                for element in soup.body.find_all(['span', 'td', 'img'], recursive=True):
+                    if element.name == 'img':
+                        # For images, we provide the tag as is (base64)
+                        segs.append(str(element))
+                    elif element.string and element.string.strip():
+                        segs.append(element.string.strip())
+                return segs
+
+            orig_texts = _get_segments(soup_orig)
+            trans_texts = _get_segments(soup_trans)
+            
+            # Ensure we have a 1:1 mapping for the preview segments
+            min_len = min(len(orig_texts), len(trans_texts))
+            results = [{"original": orig_texts[i], "translated": trans_texts[i]} for i in range(min_len)]
+            
+            return {
+                "original": "\n".join(orig_texts),
+                "translated": "\n".join(trans_texts),
+                "segments": results
+            }
+        except Exception as e:
+            logger.error(f"High-fidelity PDF processing failed, falling back to basic: {e}")
+            # FALLBACK to original basic extractor
+            return await self._process_pdf_basic(file_content, src_lang, tgt_lang, progress_callback)
+
+    async def _process_pdf_basic(self, file_content: bytes, src_lang: str, tgt_lang: str, progress_callback=None) -> Dict[str, Any]:
+        """Original absolute-positioning extraction for PDF."""
         pages_data = self.pdf_extractor.extract(file_content)
         all_text = []
-        
         for page in pages_data:
             for span in page.spans:
                 all_text.append(span.text)
@@ -67,23 +124,15 @@ class DocumentProcessor:
                 for row in table.rows:
                     if row:
                         all_text.append(" | ".join([str(c) if c else "" for c in row]))
-            if self.ocr_handler:
-                for img in page.images:
-                    ocr_results = self.ocr_handler.extract_text_from_image(img.image_bytes)
-                    for res in ocr_results:
-                        all_text.append(res["text"])
         
         unique_texts = list(set([t for t in all_text if t.strip()]))
         translated_list = await self.translation_service.batch_translate(
             unique_texts, src_lang, tgt_lang, progress_callback=progress_callback
         )
-        
-        # Populate cache for reconstruction
-        self._translation_cache[cache_key] = dict(zip(unique_texts, translated_list))
-                        
         return {
-            "original_segments": unique_texts,
-            "translated_segments": translated_list
+            "original": "\n".join(unique_texts),
+            "translated": "\n".join(translated_list),
+            "segments": [{"original": o, "translated": t} for o, t in zip(unique_texts, translated_list)]
         }
 
     async def process_docx(self, file_content: bytes) -> str:
@@ -139,15 +188,11 @@ class DocumentProcessor:
         
         try:
             if filename.endswith(".pdf"):
-                # For PDF, we still do the internal batch because of reconstruction complexity
                 pdf_res = await self.process_pdf(content, src_lang, tgt_lang, progress_callback=progress_callback)
-                segments = pdf_res["original_segments"]
-                translated_texts = pdf_res["translated_segments"]
-                results = [{"original": o, "translated": t} for o, t in zip(segments, translated_texts)]
                 return {
-                    "original": "\n".join(segments),
-                    "translated": "\n".join(translated_texts),
-                    "segments": results,
+                    "original": pdf_res["original"],
+                    "translated": pdf_res["translated"],
+                    "segments": pdf_res["segments"],
                     "fileInfo": {"name": file_name, "type": "pdf", "size": file_size}
                 }
             else:
@@ -245,42 +290,39 @@ class DocumentProcessor:
             raise ValueError(f"Error reconstructing document: {str(e)}")
 
     async def _reconstruct_pdf(self, content: bytes, src_lang: str, tgt_lang: str) -> bytes:
-        """High-fidelity PDF reconstruction using ReportLab and Noto Sans Devanagari."""
-        file_hash = hashlib.md5(content).hexdigest()
-        cache_key = f"{file_hash}_{src_lang}_{tgt_lang}"
-        
-        pages_data = self.pdf_extractor.extract(content)
-        
-        texts_to_translate = []
-        for page in pages_data:
-            for span in page.spans:
-                texts_to_translate.append(span.text)
-            for table in page.tables:
-                for row in table.rows:
-                    if row:
-                        texts_to_translate.extend([str(c) if c else "" for c in row])
-            if self.ocr_handler:
-                for img in page.images:
-                    try:
-                        ocr_res = self.ocr_handler.extract_text_from_image(img.image_bytes)
-                        texts_to_translate.extend([r["text"] for r in ocr_res])
-                    except Exception as e:
-                        logger.warning(f"OCR failed for image block: {e}")
+        """High-fidelity PDF reconstruction using WeasyPrint (with fallback to ReportLab)."""
+        try:
+            # 1. Convert to rich HTML
+            html_content = self.hf_extractor.pdf_to_html(content)
+            
+            # 2. Translate HTML (hits the persistent disk cache)
+            translated_html = await self.hf_translator.translate_html(
+                html_content, src_lang, tgt_lang, progress_callback=None, cache_only=True
+            )
+            
+            # 3. Reconstruct via WeasyPrint
+            return self.hf_reconstructor.html_to_pdf(translated_html)
+            
+        except Exception as e:
+            logger.error(f"High-fidelity reconstruction failed, falling back: {e}")
+            
+            # FALLBACK to original ReportLab-based reconstruction
+            pages_data = self.pdf_extractor.extract(content)
+            texts_to_translate = []
+            for page in pages_data:
+                for span in page.spans:
+                    texts_to_translate.append(span.text)
+                for table in page.tables:
+                    for row in table.rows:
+                        if row:
+                            texts_to_translate.extend([str(c) if c else "" for c in row])
 
-        if not texts_to_translate:
-            return content
-
-        # All translations are already in the persistent Knowledge Graph
-        # so we don't need a separate in-memory _translation_cache check.
-        # We can just batch_translate (it will hit the disk cache instantly)
-        unique_texts = list(set([t for t in texts_to_translate if t.strip()]))
-        translated_list = await self.translation_service.batch_translate(
-            unique_texts, src_lang, tgt_lang, cache_only=True
-        )
-        trans_map = dict(zip(unique_texts, translated_list))
-        
-        # Reconstruct
-        return self.pdf_reconstructor.reconstruct(pages_data, trans_map)
+            unique_texts = list(set([t for t in texts_to_translate if t.strip()]))
+            translated_list = await self.translation_service.batch_translate(
+                unique_texts, src_lang, tgt_lang, cache_only=True
+            )
+            trans_map = dict(zip(unique_texts, translated_list))
+            return self.pdf_reconstructor.reconstruct(pages_data, trans_map)
 
     async def _reconstruct_docx(self, content: bytes, src_lang: str, tgt_lang: str) -> bytes:
         """Translate DOCX run-by-run to preserve bold, italic, underline, fonts, and colours."""

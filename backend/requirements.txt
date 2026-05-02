@@ -21,3 +21,5 @@ reportlab
 pdfplumber
 yt-dlp
 youtube-transcript-api
+weasyprint
+beautifulsoup4
