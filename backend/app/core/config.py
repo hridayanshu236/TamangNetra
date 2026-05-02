@@ -33,14 +33,21 @@ class Settings(BaseSettings):
     tmt_api_token: str = "team_xxxxxxxxx"
     tmt_api_base_url: str = "https://tmt.ilprl.ku.edu.np/lang-translate"
     
+    # Security
+    secret_key: str = "your-secret-key-change-in-production"
+    encryption_key: str = "your-256-bit-hex-key-here"
+    # Frontend origin(s) that are allowed to make requests
+    cors_origins: list[str] | str = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # Hosts that the API will respond to
+    trusted_hosts: list[str] | str = ["localhost", "127.0.0.1", "0.0.0.0"]
+    
+    # Translation API
+    tmt_api_token: str = "team_xxxxxxxxx"
+    tmt_api_base_url: str = "https://tmt.ilprl.ku.edu.np/lang-translate"
+
     # File Upload
     max_file_size: int = 52428800  # 50MB
     upload_dir: str = "./uploads"
-    
-    # Cache & Queue
-    redis_url: str = "redis://localhost:6379/0"
-    celery_broker_url: str = "redis://localhost:6379/1"
-    celery_result_backend: str = "redis://localhost:6379/2"
     
     # Logging
     log_level: str = "INFO"
