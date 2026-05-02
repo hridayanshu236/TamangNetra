@@ -545,16 +545,18 @@ export default function Home() {
       // 2. Fetch Video Page to find caption tracks via CORS proxy
       let pageHtml = "";
       try {
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
         const pageResponse = await fetch(proxyUrl);
-        pageHtml = await pageResponse.text();
+        if (!pageResponse.ok) throw new Error("Primary proxy failed");
+        const data = await pageResponse.json();
+        pageHtml = data.contents;
       } catch (e) {
-        // Fallback to allorigins if corsproxy fails
+        // Fallback to corsproxy.io if allorigins fails
         console.warn("[YouTube] Primary proxy failed, trying fallback...");
-        const fallbackUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
+        const fallbackUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
         const fallbackResponse = await fetch(fallbackUrl);
-        const fallbackData = await fallbackResponse.json();
-        pageHtml = fallbackData.contents;
+        if (!fallbackResponse.ok) throw new Error("Both proxies failed to fetch YouTube page");
+        pageHtml = await fallbackResponse.text();
       }
 
       // 3. Parse captionTracks from the page source
@@ -584,8 +586,15 @@ export default function Home() {
       }
 
       // 4. Fetch the actual transcript XML (or JSON3)
-      const transcriptResponse = await fetch(`https://corsproxy.io/?${encodeURIComponent(track.baseUrl + '&fmt=json3')}`);
-      const transcriptData = await transcriptResponse.json();
+      let transcriptData;
+      try {
+        const transcriptResponse = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(track.baseUrl + '&fmt=json3')}`);
+        const data = await transcriptResponse.json();
+        transcriptData = JSON.parse(data.contents);
+      } catch (e) {
+        const fallbackResponse = await fetch(`https://corsproxy.io/?${encodeURIComponent(track.baseUrl + '&fmt=json3')}`);
+        transcriptData = await fallbackResponse.json();
+      }
 
       // 5. Format the segments
       const formattedSubtitles = transcriptData.events
