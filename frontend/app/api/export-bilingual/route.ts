@@ -97,13 +97,13 @@ async function generatePDF(data: BilingualExportRequest): Promise<Uint8Array> {
     text: string,
     x: number,
     y: number,
-    options: { size?: number; font?: typeof font; color?: { type: 'RGB'; red: number; green: number; blue: number } }
+    options: { size?: number; font?: typeof font; color?: any }
   ) {
     const drawFont = options.font || font;
     const drawSize = options.size || FONT_SIZE;
     const drawColor = options.color || rgb(0.15, 0.15, 0.15);
     try {
-      page.drawText(text, { x, y, size: drawSize, font: drawFont, color: drawColor });
+      page.drawText(text, { x, y, size: drawSize, font: drawFont, color: drawColor as any });
     } catch {
       // Transliterate fallback: replace non-Latin chars with '?'
       const fallback = text.replace(/[^\x00-\x7F]/g, '?');
