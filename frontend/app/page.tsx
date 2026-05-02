@@ -44,7 +44,7 @@ import YouTube, { type YouTubePlayer } from "react-youtube";
 const LANGUAGE_OPTIONS = ["English", "Nepali", "Tamang"] as const;
 
 type Language = (typeof LANGUAGE_OPTIONS)[number];
-type DocumentFileType = "pdf" | "docx" | "csv" | "tsv" | "xlsx" | "xls";
+type DocumentFileType = "pdf" | "docx" | "csv" | "tsv" | "xlsx" | "xls" | "image" | "jpg" | "jpeg" | "png";
 
 type ProcessFileSegment = {
   original: string;
@@ -55,7 +55,11 @@ type ProcessFileResult = {
   original: string;
   translated: string;
   segments: ProcessFileSegment[];
-  knowledgeEntries?: Array<{ source: string; translation: string; frequency: number }>;
+  knowledgeEntries?: Array<{
+    source: string;
+    translation: string;
+    frequency: number;
+  }>;
   fileInfo: {
     name: string;
     type: DocumentFileType;
@@ -359,7 +363,7 @@ export default function Home() {
                 .filter(entry => entry.frequency > 1)
                 .sort((a, b) => b.frequency - a.frequency);
               
-              setDocumentResult({
+              const finalResult: ProcessFileResult = {
                 original: resultData.original || "",
                 translated: resultData.translated || "",
                 segments: resultData.segments || [],
@@ -369,7 +373,8 @@ export default function Home() {
                   type: documentFileType || "pdf",
                   size: documentFile!.size,
                 }
-              });
+              };
+              setDocumentResult(finalResult);
               setDocumentStatus("success");
             } else if (data.type === "error") {
               throw new Error(data.message);

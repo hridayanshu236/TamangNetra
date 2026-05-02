@@ -14,7 +14,7 @@ class OcrHandler:
             cls._instance = super(OcrHandler, cls).__new__(cls)
             # Initialize PaddleOCR (lang='hi' for Devanagari support)
             logger.info("Initializing PaddleOCR Engine...")
-            cls._instance.engine = PaddleEngine(use_angle_cls=True, lang='hi')
+            cls._instance.engine = PaddleEngine(use_angle_cls=True, lang='hi', use_mkldnn=False)
             logger.info("PaddleOCR Engine ready.")
         return cls._instance
 
