@@ -179,6 +179,7 @@ export default function Home() {
   const [documentElapsedSeconds, setDocumentElapsedSeconds] = useState(0);
   const [documentProgress, setDocumentProgress] = useState(0);
   const [documentProgressMessage, setDocumentProgressMessage] = useState("Uploading document...");
+  const [incrementalSegments, setIncrementalSegments] = useState<Array<{ original: string; translated: string }>>([]);
 
   useEffect(() => {
     if (documentStatus !== "loading") {
@@ -310,6 +311,7 @@ export default function Home() {
       setDocumentStatus("loading");
       setDocumentProgress(0);
       setDocumentProgressMessage("Translating document...");
+      setIncrementalSegments([]);
     } else {
       setDocumentProgressMessage("Finalizing results...");
     }
@@ -392,7 +394,7 @@ export default function Home() {
         
         // HANDLE INCREMENTAL SEGMENTS
         if (data.segment) {
-          setTranslatedResults(prev => {
+          setIncrementalSegments(prev => {
             // Check if segment already exists to avoid duplicates
             const exists = prev.some(s => s.original === data.segment.original);
             if (exists) return prev;
@@ -1048,44 +1050,41 @@ export default function Home() {
                   </Card>
                   <Card className="border-dashed md:col-span-2 bg-gradient-to-br from-emerald-50/30 to-teal-50/30 dark:from-emerald-950/20 dark:to-teal-950/20">
                     <CardContent className="p-4 text-sm text-muted-foreground h-full relative">
-                      {documentStatus === "loading" ? (() => {
+                      {documentStatus === "loading" || (documentStatus === "success" && incrementalSegments.length > 0) ? (() => {
                         const mins = Math.floor(documentElapsedSeconds / 60);
                         const secs = documentElapsedSeconds % 60;
                         const timeStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                        
                         return (
-                          <div className="flex flex-col items-center justify-center gap-6 py-12 px-4 text-center">
-                            {/* Animated Activity Ring */}
-                            <div className="relative">
-                              <motion.div
-                                animate={{ rotate: 360 }}
-                                transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                                className="size-20 rounded-full border-2 border-emerald-500/20 border-t-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.15)]"
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center">
-                                <motion.div
-                                  animate={{ opacity: [0.3, 1, 0.3] }}
-                                  transition={{ repeat: Infinity, duration: 1.5 }}
-                                  className="size-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="space-y-2">
-                              <h3 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
-                                {documentProgressMessage}
-                              </h3>
-                              <p className="text-3xl font-mono tracking-tighter text-emerald-600 dark:text-emerald-400 tabular-nums">
-                                {timeStr}
+                          <div className="flex flex-col h-full">
+                            <div className="flex items-center justify-between mb-3">
+                              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                                {documentStatus === "loading" ? "Live Translating..." : "Translation Complete"}
                               </p>
+                              {documentStatus === "loading" && (
+                                <span className="text-[10px] font-mono text-muted-foreground">{timeStr}</span>
+                              )}
                             </div>
-
-                            <div className="flex items-center gap-4 text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-                              <span className="flex items-center gap-1.5">
-                                <span className="size-1 rounded-full bg-emerald-500" /> Neural API Active
-                              </span>
-                              <span className="flex items-center gap-1.5">
-                                <span className="size-1 rounded-full bg-teal-500" /> Preserving Layout
-                              </span>
+                            
+                            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar min-h-[120px]">
+                              {incrementalSegments.length > 0 ? (
+                                incrementalSegments.map((seg, i) => (
+                                  <motion.div
+                                    key={i}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    className="p-2 rounded bg-white/50 dark:bg-black/20 border border-emerald-500/10"
+                                  >
+                                    <p className="text-[10px] text-muted-foreground mb-1 italic line-clamp-1">{seg.original}</p>
+                                    <p className="text-xs text-foreground">{seg.translated}</p>
+                                  </motion.div>
+                                ))
+                              ) : (
+                                <div className="flex flex-col items-center justify-center h-full gap-4 py-8">
+                                  <Loader2 className="size-6 animate-spin text-emerald-500/40" />
+                                  <p className="text-xs text-muted-foreground">{documentProgressMessage}</p>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
