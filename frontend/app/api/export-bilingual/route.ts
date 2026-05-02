@@ -710,7 +710,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Unsupported format' }, { status: 400 });
     }
 
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(fileBuffer as any, {
       status: 200,
       headers: {
         'Content-Type': mimeTypes[format],
