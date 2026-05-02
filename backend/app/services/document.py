@@ -133,19 +133,23 @@ class DocumentProcessor:
             raise ValueError(f"Failed to process image: {str(e)}")
 
     async def process_file(self, file_content: bytes, file_name: str, file_size: int, src_lang: str, tgt_lang: str, progress_callback = None) -> Dict[str, Any]:
-        """Main dispatcher for processing files."""
+        """Main dispatcher for processing files. Now supports yielding segments back to the caller."""
         content = file_content
         filename = file_name.lower()
         
-        extracted_text = ""
-        
         try:
             if filename.endswith(".pdf"):
-                # PDF already handles batch translation internally to populate reconstruction cache
+                # For PDF, we still do the internal batch because of reconstruction complexity
                 pdf_res = await self.process_pdf(content, src_lang, tgt_lang, progress_callback=progress_callback)
                 segments = pdf_res["original_segments"]
                 translated_texts = pdf_res["translated_segments"]
-                extracted_text = "\n".join(segments)
+                results = [{"original": o, "translated": t} for o, t in zip(segments, translated_texts)]
+                return {
+                    "original": "\n".join(segments),
+                    "translated": "\n".join(translated_texts),
+                    "segments": results,
+                    "fileInfo": {"name": file_name, "type": "pdf", "size": file_size}
+                }
             else:
                 if filename.endswith(".docx"):
                     extracted_text = await self.process_docx(content)
@@ -161,34 +165,30 @@ class DocumentProcessor:
                 if not extracted_text.strip():
                     raise ValueError("No text could be extracted from the document")
                     
-                # Split into manageable chunks at the sentence level
                 segments = self._split_into_sentences(extracted_text)
                 
-                # Translate segments
+                # Translate segments using the enhanced streaming callback
                 translated_texts = await self.translation_service.batch_translate(
                     texts=segments,
                     source_language=src_lang,
                     target_language=tgt_lang,
                     progress_callback=progress_callback
                 )
-            
-            results = []
-            for orig, trans in zip(segments, translated_texts):
-                results.append({
-                    "original": orig,
-                    "translated": trans
-                })
                 
-            return {
-                "original": extracted_text,
-                "translated": "\n".join(translated_texts),
-                "segments": results,
-                "fileInfo": {
-                    "name": file_name,
-                    "type": filename.split('.')[-1] if '.' in filename else 'unknown',
-                    "size": file_size
+                results = []
+                for orig, trans in zip(segments, translated_texts):
+                    results.append({"original": orig, "translated": trans})
+                    
+                return {
+                    "original": extracted_text,
+                    "translated": "\n".join(translated_texts),
+                    "segments": results,
+                    "fileInfo": {
+                        "name": file_name,
+                        "type": filename.split('.')[-1] if '.' in filename else 'unknown',
+                        "size": file_size
+                    }
                 }
-            }
             
         except Exception as e:
             raise ValueError(f"Error processing document: {str(e)}")

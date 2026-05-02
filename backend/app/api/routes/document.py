@@ -37,12 +37,15 @@ async def process_document(
     
     queue = asyncio.Queue()
     
-    async def progress_callback(current, total):
-        await queue.put({"type": "progress", "current": current, "total": total})
+    async def progress_callback(current, total, last_segment=None):
+        msg = {"type": "progress", "current": current, "total": total}
+        if last_segment:
+            msg["segment"] = last_segment
+        await queue.put(msg)
         
     async def run_process():
         try:
-            await queue.put({"type": "status", "message": "Extracting text..."})
+            await queue.put({"type": "status", "message": "Extracting and translating..."})
             result = await processor.process_file(file_content, file_name, file_size, src_lang, tgt_lang, progress_callback)
             await queue.put({"type": "result", "data": result})
         except ValueError as e:

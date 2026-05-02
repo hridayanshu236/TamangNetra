@@ -389,6 +389,16 @@ export default function Home() {
         const progress = Math.round((data.current / data.total) * 100);
         setDocumentProgress(progress);
         setDocumentProgressMessage(`Translating sentences (${data.current}/${data.total})...`);
+        
+        // HANDLE INCREMENTAL SEGMENTS
+        if (data.segment) {
+          setTranslatedResults(prev => {
+            // Check if segment already exists to avoid duplicates
+            const exists = prev.some(s => s.original === data.segment.original);
+            if (exists) return prev;
+            return [...prev, data.segment];
+          });
+        }
       } else if (data.type === "result") {
         const resultData = data.data;
         

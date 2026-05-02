@@ -250,11 +250,12 @@ class TranslationService:
                 try:
                     # Check memory cache first (ultra-fast)
                     if cache_key in _knowledge_graph:
-                        results[idx] = _knowledge_graph[cache_key]
+                        translated = _knowledge_graph[cache_key]
+                        results[idx] = translated
                         async with lock:
                             completed += 1
                             if progress_callback:
-                                await progress_callback(completed, total)
+                                await progress_callback(completed, total, {"original": text, "translated": translated})
                         return
 
                     request = TranslationRequest(
@@ -269,14 +270,18 @@ class TranslationService:
                         _knowledge_graph[cache_key] = translated
                         api_calls += 1
                     results[idx] = translated
+                    
+                    async with lock:
+                        completed += 1
+                        if progress_callback:
+                            await progress_callback(completed, total, {"original": text, "translated": translated})
                 except Exception as e:
                     logger.warning(f"Translation failed for '{text[:50]}': {e}")
                     results[idx] = text  # Fallback to original
-
-            async with lock:
-                completed += 1
-                if progress_callback:
-                    await progress_callback(completed, total)
+                    async with lock:
+                        completed += 1
+                        if progress_callback:
+                            await progress_callback(completed, total, {"original": text, "translated": text})
 
         if uncached_indices:
             await asyncio.gather(*(translate_one(i) for i in uncached_indices))
