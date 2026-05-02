@@ -44,6 +44,22 @@ import YouTube, { type YouTubePlayer } from "react-youtube";
 
 const LANGUAGE_OPTIONS = ["English", "Nepali", "Tamang"] as const;
 
+function extractVideoId(url: string): string | null {
+  const patterns = [
+    /[?&]v=([a-zA-Z0-9_-]{11})/,
+    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+    /embed\/([a-zA-Z0-9_-]{11})/,
+    /shorts\/([a-zA-Z0-9_-]{11})/,
+    /v\/([a-zA-Z0-9_-]{11})/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match && match[1]) return match[1];
+  }
+  return null;
+}
+
 type Language = (typeof LANGUAGE_OPTIONS)[number];
 type DocumentFileType = "pdf" | "docx" | "csv" | "tsv" | "xlsx" | "xls" | "image" | "jpg" | "jpeg" | "png";
 
@@ -522,25 +538,89 @@ export default function Home() {
     setTranslatedYoutubeSubtitles([]);
 
     try {
-      // Map display name to ISO code
+      // 1. Extract Video ID
+      const videoId = extractVideoId(youtubeUrl.trim());
+      if (!videoId) throw new Error("Invalid YouTube URL");
+
+      // 2. Fetch Video Page to find caption tracks via CORS proxy
+      let pageHtml = "";
+      try {
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
+        const pageResponse = await fetch(proxyUrl);
+        pageHtml = await pageResponse.text();
+      } catch (e) {
+        // Fallback to allorigins if corsproxy fails
+        console.warn("[YouTube] Primary proxy failed, trying fallback...");
+        const fallbackUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
+        const fallbackResponse = await fetch(fallbackUrl);
+        const fallbackData = await fallbackResponse.json();
+        pageHtml = fallbackData.contents;
+      }
+
+      // 3. Parse captionTracks from the page source
+      const regex = /"captionTracks":\s*(\[.*?\])/;
+      const match = pageHtml.match(regex);
+      
+      if (!match) {
+        throw new Error("Could not find any captions for this video. It might be restricted or have no subtitles.");
+      }
+
+      const captionTracks = JSON.parse(match[1]);
+      
+      // Find requested language or English
       const langMapping: Record<string, string> = {
         'English': 'en',
         'Nepali': 'ne',
         'Tamang': 'ne',
       };
-      const langCode = langMapping[sourceLanguage] || 'en';
-      const targetUrl = `${youtubeUrl.trim()}&t=${Date.now()}`;
-      console.log(`[YouTube] Calling backend API with URL: ${targetUrl} (Lang: ${langCode})`);
+      const targetLangCode = langMapping[sourceLanguage] || 'en';
+      
+      let track = captionTracks.find((t: any) => t.languageCode === targetLangCode);
+      if (!track) track = captionTracks.find((t: any) => t.languageCode === 'en');
+      if (!track) track = captionTracks[0];
 
-      const payload = await apiClient.fetchYoutubeSubtitles(targetUrl, langCode);
+      if (!track || !track.baseUrl) {
+        throw new Error("No suitable caption track found.");
+      }
 
-      setYoutubeTitle(payload.title || "");
-      setYoutubeVideoId(payload.videoId || "");
-      setYoutubeIsDemo(Boolean(payload.isDemo));
-      setYoutubeSubtitles(payload.subtitles || []);
-      setTranslatedYoutubeSubtitles([]); // Clear old translations
+      // 4. Fetch the actual transcript XML (or JSON3)
+      const transcriptResponse = await fetch(`https://corsproxy.io/?${encodeURIComponent(track.baseUrl + '&fmt=json3')}`);
+      const transcriptData = await transcriptResponse.json();
+
+      // 5. Format the segments
+      const formattedSubtitles = transcriptData.events
+        .filter((e: any) => e.segs && e.segs.length > 0)
+        .map((event: any, i: number) => {
+          const text = event.segs.map((s: any) => s.utf8).join("").trim();
+          const start = event.tStartMs / 1000;
+          const duration = event.dDurationMs / 1000;
+          
+          const formatTime = (seconds: number) => {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            const ms = Math.floor((seconds % 1) * 1000);
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
+          };
+
+          return {
+            index: i + 1,
+            startTime: formatTime(start),
+            endTime: formatTime(start + duration),
+            text
+          };
+        })
+        .filter((s: any) => s.text.length > 0);
+
+      // 6. Update State
+      setYoutubeTitle("YouTube Video");
+      setYoutubeVideoId(videoId);
+      setYoutubeIsDemo(false);
+      setYoutubeSubtitles(formattedSubtitles);
+      setTranslatedYoutubeSubtitles([]);
       setYoutubeStatus("success");
-      console.log(`[YouTube] Successfully fetched ${payload.subtitles?.length || 0} segments. Demo mode: ${payload.isDemo}`);
+      
+      console.log(`[YouTube] Successfully fetched ${formattedSubtitles.length} segments via Browser + Proxy.`);
     } catch {
       setYoutubeStatus("error");
     }
@@ -1135,28 +1215,6 @@ export default function Home() {
                   >
                     <Download className="mr-2 size-4" />
                     Download SRT
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const text = prompt("Paste raw transcript text here (one line per segment):");
-                      if (text) {
-                        const lines = text.split("\n").filter(l => l.trim());
-                        const mockSubs = lines.map((line, i) => ({
-                          index: i + 1,
-                          startTime: `00:00:${(i * 4).toString().padStart(2, '0')},000`,
-                          endTime: `00:00:${(i * 4 + 3).toString().padStart(2, '0')},000`,
-                          text: line.trim()
-                        }));
-                        setYoutubeSubtitles(mockSubs);
-                        setYoutubeStatus("success");
-                        setYoutubeTitle("Manual Input");
-                        setYoutubeIsDemo(false);
-                      }
-                    }}
-                  >
-                    <Plus className="mr-2 size-4" />
-                    Manual Input
                   </Button>
                   <StatusPill
                     status={youtubeStatus}
