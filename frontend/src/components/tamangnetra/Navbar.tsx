@@ -158,7 +158,7 @@ export function Navbar() {
             asChild
           >
             <a
-              href="https://github.com"
+              href="https://github.com/Ssaammmmiitt/TamangNetra"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="GitHub"

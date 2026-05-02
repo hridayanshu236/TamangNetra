@@ -38,17 +38,44 @@ class DocumentProcessor:
     def _is_math(self, text: str) -> bool:
         """Heuristic to identify math/formulas that should not be translated."""
         t = text.strip()
-        # Extremely short non-alphanumeric strings (e.g. "=", "+", "x")
         if len(t) <= 1 and not t.isalnum(): return True
-        # Common math symbols if the string is very short (e.g. "z =", "1+")
         if any(c in t for c in ['=', '+', '^', '∫', '∑', '∏', '√', '∂', '∆']):
             if len(t) < 8: return True
-        # LaTeX-like patterns or underscores (usually variables)
         if '\\' in t or (len(t) < 10 and '_' in t): return True
         return False
 
+    async def _process_spreadsheet(self, file_content: bytes, file_type: str, src_lang: str, tgt_lang: str, progress_callback=None) -> Dict[str, Any]:
+        """Restored spreadsheet processing with real-time progress updates."""
+        if file_type == "csv":
+            df = pd.read_csv(io.BytesIO(file_content))
+        elif file_type == "tsv":
+            df = pd.read_csv(io.BytesIO(file_content), sep='\t')
+        else:
+            df = pd.read_excel(io.BytesIO(file_content))
+            
+        texts_to_translate = []
+        for col in df.columns:
+            texts_to_translate.append(str(col))
+        for _, row in df.iterrows():
+            for val in row:
+                if pd.isna(val):
+                    texts_to_translate.append("")
+                else:
+                    texts_to_translate.append(str(val))
+                    
+        # Pass progress_callback to show real-time updates in frontend
+        translated_texts = await self.translation_service.batch_translate(
+            texts_to_translate, src_lang, tgt_lang, progress_callback=progress_callback
+        )
+        
+        return {
+            "original": df.to_csv(index=False),
+            "translated": "Tabular data translated.",
+            "segments": [{"original": o, "translated": t} for o, t in zip(texts_to_translate, translated_texts) if o.strip()]
+        }
+
     async def process_pdf(self, file_content: bytes, src_lang: str, tgt_lang: str, progress_callback=None, cache_only: bool = False) -> Dict[str, Any]:
-        """Bit-Identical Native Span Extraction for PDF with Formula Skipping."""
+        """Bit-Identical Native Span Extraction for PDF."""
         try:
             doc = fitz.open(stream=file_content, filetype="pdf")
             orig_texts = []
@@ -117,6 +144,14 @@ class DocumentProcessor:
                     "fileInfo": {"name": file_name, "type": "docx", "size": file_size}
                 }
             
+            if filename.endswith((".csv", ".tsv", ".xlsx")):
+                if filename.endswith(".csv"): file_type = "csv"
+                elif filename.endswith(".tsv"): file_type = "tsv"
+                else: file_type = "xlsx"
+                # FIXED: Now passing progress_callback for real-time spreadsheet updates
+                res = await self._process_spreadsheet(file_content, file_type, src_lang, tgt_lang, progress_callback=progress_callback)
+                return {**res, "fileInfo": {"name": file_name, "type": file_type, "size": file_size}}
+            
             return {"original": "", "translated": "", "segments": [], "fileInfo": {"name": file_name, "type": "unknown"}}
         except Exception as e:
             raise ValueError(f"Error processing document: {str(e)}")
@@ -130,6 +165,43 @@ class DocumentProcessor:
                 trans_map = {item["original"]: item["translated"] for item in processed["segments"]}
                 reconstructed = self.native_reconstructor.reconstruct(content, trans_map)
                 return reconstructed, "application/pdf"
+            
+            if filename.endswith((".csv", ".tsv", ".xlsx")):
+                if filename.endswith(".csv"): file_type = "csv"
+                elif filename.endswith(".tsv"): file_type = "tsv"
+                else: file_type = "xlsx"
+                
+                if file_type == "csv":
+                    df = pd.read_csv(io.BytesIO(content))
+                elif file_type == "tsv":
+                    df = pd.read_csv(io.BytesIO(content), sep='\t')
+                else:
+                    df = pd.read_excel(io.BytesIO(content))
+                
+                texts = []
+                for col in df.columns: texts.append(str(col))
+                for _, row in df.iterrows():
+                    for val in row: texts.append(str(val) if pd.notnull(val) else "")
+                
+                # Reconstruct also uses cache_only to be fast
+                translated = await self.translation_service.batch_translate(texts, src_lang, tgt_lang, cache_only=True)
+                trans_map = dict(zip(texts, translated))
+                
+                df.columns = [trans_map.get(str(col), str(col)) for col in df.columns]
+                for col in df.columns:
+                    df[col] = df[col].apply(lambda x: trans_map.get(str(x), str(x)) if pd.notnull(x) else x)
+                
+                out = io.BytesIO()
+                if file_type == "csv":
+                    df.to_csv(out, index=False)
+                elif file_type == "tsv":
+                    df.to_csv(out, index=False, sep='\t')
+                else:
+                    df.to_excel(out, index=False)
+                
+                mtype = "text/csv" if file_type == "csv" else ("text/tab-separated-values" if file_type == "tsv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                return out.getvalue(), mtype
+
             return content, "application/octet-stream"
         except Exception as e:
             raise ValueError(f"Error reconstructing document: {str(e)}")

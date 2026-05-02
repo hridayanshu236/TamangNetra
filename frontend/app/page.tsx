@@ -698,20 +698,10 @@ export default function Home() {
               </div>
               <p className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
                 An advanced neural translation ecosystem for English, Nepali, and Tamang. 
-                Experience <strong>pixel-perfect layout reconstruction</strong> for PDF, DOCX, CSV, and TSV files, 
-                along with <strong>synchronized interactive translation</strong> for YouTube media.
+                Experience <strong>pixel-perfect layout reconstruction</strong> for PDF, DOCX, CSV, and TSV files.
               </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" asChild className="w-fit hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/30 transition-colors">
-            <a
-              href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/docs`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Developer API <ExternalLink className="ml-1.5 size-3.5" />
-            </a>
-          </Button>
         </motion.section>
 
         <motion.div
@@ -739,9 +729,7 @@ export default function Home() {
             <Card className="backdrop-blur-xl bg-background/60 border-white/10 shadow-xl overflow-hidden">
               <CardHeader className="border-b border-border/50 bg-muted/20">
                 <CardTitle>Text translation</CardTitle>
-                <CardDescription>
-                  PII, email addresses, and phone numbers stay in place.
-                </CardDescription>
+
               </CardHeader>
               <CardContent className="p-0">
                 <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border/50">
@@ -785,9 +773,7 @@ export default function Home() {
                       </Button>
                       <div className="flex items-center gap-2">
                         <StatusPill status={translateStatus} label={translateStatus === "success" ? "Translated" : translateStatus === "error" ? "Failed" : "Ready"} />
-                        <Badge variant="outline" className="bg-background/50 backdrop-blur-sm">
-                          {piiCount > 0 ? `${piiCount} protected` : "PII safe"}
-                        </Badge>
+
                       </div>
                     </div>
                   </div>
